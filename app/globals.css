@@ -1,0 +1,381 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  color: #fff;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+}
+
+body {
+  overflow: hidden;
+}
+
+button {
+  border: 0;
+  outline: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.app {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  background: #000;
+}
+
+.feed {
+  width: 100%;
+  height: 100dvh;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+}
+
+.feed::-webkit-scrollbar {
+  display: none;
+}
+
+.video-page {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  scroll-snap-align: start;
+  background: #111;
+}
+
+.video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gradient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.5),
+      transparent 22%,
+      transparent 58%,
+      rgba(0, 0, 0, 0.78)
+    );
+}
+
+/* 顶部 */
+
+.top {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 72px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 0 18px;
+
+  pointer-events: none;
+}
+
+.top > * {
+  pointer-events: auto;
+}
+
+.brand {
+  font-size: 23px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.switch {
+  display: flex;
+  gap: 22px;
+  align-items: center;
+
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.switch span {
+  position: relative;
+  opacity: 0.55;
+}
+
+.switch .selected {
+  opacity: 1;
+}
+
+.switch .selected::after {
+  content: "";
+
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+
+  width: 22px;
+  height: 3px;
+
+  border-radius: 99px;
+  background: #fff;
+
+  transform: translateX(-50%);
+}
+
+.search {
+  font-size: 20px;
+}
+
+/* 静音按钮 */
+
+.sound {
+  position: absolute;
+  z-index: 10;
+
+  top: 82px;
+  right: 16px;
+
+  width: 38px;
+  height: 38px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: 50%;
+
+  background: rgba(0, 0, 0, 0.35);
+
+  backdrop-filter: blur(10px);
+
+  font-size: 17px;
+}
+
+/* 左下角 */
+
+.information {
+  position: absolute;
+  z-index: 10;
+
+  left: 16px;
+  right: 100px;
+  bottom: 92px;
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: 50%;
+
+  background: #fff;
+  color: #111;
+
+  font-weight: 900;
+}
+
+.user strong {
+  font-size: 15px;
+}
+
+.follow {
+  margin-left: 4px;
+
+  padding: 5px 11px;
+
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 6px;
+
+  font-size: 12px;
+}
+
+.following {
+  opacity: 0.65;
+}
+
+.title {
+  margin: 13px 0 7px;
+
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.music {
+  margin: 0;
+
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+/* 右侧按钮 */
+
+.actions {
+  position: absolute;
+  z-index: 15;
+
+  right: 13px;
+  bottom: 91px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  gap: 20px;
+}
+
+.actions button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  gap: 4px;
+}
+
+.icon,
+.heart {
+  font-size: 31px;
+  line-height: 1;
+
+  text-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.55);
+}
+
+.heart.liked {
+  color: #ff2d55;
+}
+
+.actions small {
+  font-size: 11px;
+}
+
+.round-avatar {
+  width: 43px;
+  height: 43px;
+
+  display: grid;
+  place-items: center;
+
+  border: 2px solid #fff;
+  border-radius: 50%;
+
+  background: rgba(0, 0, 0, 0.25);
+
+  font-weight: 900;
+}
+
+/* 底部 */
+
+.bottom {
+  position: fixed;
+  z-index: 50;
+
+  left: 0;
+  right: 0;
+  bottom: 0;
+
+  height: 67px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+
+  padding: 3px 7px 6px;
+
+  background: rgba(0, 0, 0, 0.88);
+
+  backdrop-filter: blur(15px);
+}
+
+.nav {
+  min-width: 55px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  gap: 3px;
+
+  opacity: 0.6;
+}
+
+.nav.active {
+  opacity: 1;
+}
+
+.nav span {
+  font-size: 22px;
+}
+
+.nav small {
+  font-size: 10px;
+}
+
+.create {
+  width: 48px;
+  height: 35px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: 9px;
+
+  background: #fff;
+  color: #000;
+
+  font-size: 29px;
+  font-weight: 300;
+}
+
+/* 平板 / 电脑 */
+
+@media (min-width: 700px) {
+  .app {
+    width: 430px;
+    margin: 0 auto;
+
+    box-shadow:
+      0 0 80px rgba(0, 0, 0, 0.65);
+  }
+
+  .top,
+  .bottom {
+    width: 430px;
+
+    left: 50%;
+    right: auto;
+
+    transform: translateX(-50%);
+  }
+}
