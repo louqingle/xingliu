@@ -2,7 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const videos = [
+type VideoItem = {
+  id: number;
+  src: string;
+  username: string;
+  title: string;
+  music: string;
+  likes: number;
+  comments: number;
+};
+
+const videos: VideoItem[] = [
   {
     id: 1,
     src: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
@@ -24,27 +34,36 @@ const videos = [
 ];
 
 export default function Home() {
-  const feedRef = useRef<HTMLDivElement>(null);
+  const feedRef = useRef<HTMLDivElement | null>(null);
+
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
-  const [current, setCurrent] = useState(0);
-  const [liked, setLiked] = useState<number[]>([]);
-  const [followed, setFollowed] = useState<number[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const [likedIds, setLikedIds] = useState<number[]>([]);
+
+  const [followedIds, setFollowedIds] = useState<number[]>([]);
+
   const [muted, setMuted] = useState(true);
 
   useEffect(() => {
     const feed = feedRef.current;
+
     if (!feed) return;
 
     const handleScroll = () => {
-      const index = Math.round(
-        feed.scrollTop / window.innerHeight
-      );
+      const height = window.innerHeight;
 
-      setCurrent(index);
+      if (!height) return;
+
+      const index = Math.round(feed.scrollTop / height);
+
+      setCurrentIndex(index);
     };
 
-    feed.addEventListener("scroll", handleScroll);
+    feed.addEventListener("scroll", handleScroll, {
+      passive: true,
+    });
 
     return () => {
       feed.removeEventListener("scroll", handleScroll);
@@ -57,29 +76,51 @@ export default function Home() {
 
       video.muted = muted;
 
-      if (index === current) {
-        video.play().catch(() => {});
+      if (index === currentIndex) {
+        video
+          .play()
+          .catch(() => {});
       } else {
         video.pause();
         video.currentTime = 0;
       }
     });
-  }, [current, muted]);
+  }, [currentIndex, muted]);
 
   function toggleLike(id: number) {
-    setLiked((old) =>
-      old.includes(id)
-        ? old.filter((item) => item !== id)
-        : [...old, id]
-    );
+    setLikedIds((old) => {
+      if (old.includes(id)) {
+        return old.filter((item) => item !== id);
+      }
+
+      return [...old, id];
+    });
   }
 
   function toggleFollow(id: number) {
-    setFollowed((old) =>
-      old.includes(id)
-        ? old.filter((item) => item !== id)
-        : [...old, id]
+    setFollowedIds((old) => {
+      if (old.includes(id)) {
+        return old.filter((item) => item !== id);
+      }
+
+      return [...old, id];
+    });
+  }
+
+  function goProfile() {
+    const user = localStorage.getItem(
+      "xingliu-current-user"
     );
+
+    if (user) {
+      window.location.href = "/profile";
+    } else {
+      window.location.href = "/auth";
+    }
+  }
+
+  function goAuth() {
+    window.location.href = "/auth";
   }
 
   return (
@@ -110,153 +151,251 @@ export default function Home() {
 
         button {
           border: 0;
-          background: transparent;
-          color: #fff;
+          outline: 0;
           padding: 0;
+          margin: 0;
+          background: transparent;
+          color: inherit;
           font: inherit;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
         }
 
-        .xingliu {
+        .xingliu-app {
           position: fixed;
           inset: 0;
+
           width: 100%;
           height: 100dvh;
+
+          overflow: hidden;
+
           background: #000;
           color: #fff;
-          overflow: hidden;
         }
 
-        .feed {
+        /* =========================
+           视频流
+        ========================= */
+
+        .video-feed {
           width: 100%;
-          height: 100%;
+          height: 100dvh;
+
           overflow-y: scroll;
+          overflow-x: hidden;
+
           scroll-snap-type: y mandatory;
+          scroll-behavior: smooth;
+
           overscroll-behavior-y: contain;
+
           scrollbar-width: none;
         }
 
-        .feed::-webkit-scrollbar {
+        .video-feed::-webkit-scrollbar {
           display: none;
         }
 
-        .page {
+        .video-page {
           position: relative;
+
           width: 100%;
           height: 100dvh;
+
+          overflow: hidden;
+
           scroll-snap-align: start;
           scroll-snap-stop: always;
-          overflow: hidden;
+
           background: #111;
         }
 
-        .video {
+        .video-player {
           position: absolute;
+
           inset: 0;
+
           width: 100%;
           height: 100%;
+
           object-fit: cover;
+
           background: #111;
         }
+
+        /* =========================
+           遮罩
+        ========================= */
 
         .top-gradient {
           position: absolute;
-          inset: 0 0 auto 0;
-          height: 180px;
+
+          top: 0;
+          left: 0;
+          right: 0;
+
+          height: 190px;
+
           pointer-events: none;
+
           background: linear-gradient(
             to bottom,
-            rgba(0,0,0,.55),
-            rgba(0,0,0,0)
+            rgba(0, 0, 0, 0.6),
+            rgba(0, 0, 0, 0)
           );
         }
 
         .bottom-gradient {
           position: absolute;
+
           left: 0;
           right: 0;
           bottom: 0;
-          height: 380px;
+
+          height: 390px;
+
           pointer-events: none;
+
           background: linear-gradient(
             to top,
-            rgba(0,0,0,.85),
-            rgba(0,0,0,.35) 45%,
-            rgba(0,0,0,0)
+            rgba(0, 0, 0, 0.88),
+            rgba(0, 0, 0, 0.42) 48%,
+            rgba(0, 0, 0, 0)
           );
         }
 
-        /* 顶部 */
+        /* =========================
+           顶部
+        ========================= */
 
-        .header {
+        .top-bar {
           position: fixed;
+
           z-index: 100;
+
           top: 0;
           left: 0;
           right: 0;
 
-          height: 68px;
+          height: 72px;
 
           display: flex;
-          align-items: center;
+          align-items: flex-end;
           justify-content: center;
 
+          padding-bottom: 15px;
           padding-top: env(safe-area-inset-top);
+
+          pointer-events: none;
         }
 
-        .header-inner {
+        .top-tabs {
           display: flex;
           align-items: center;
-          gap: 25px;
+          gap: 28px;
+
+          pointer-events: auto;
         }
 
-        .header-item {
+        .top-tab {
           position: relative;
-          color: rgba(255,255,255,.65);
+
+          color: rgba(255, 255, 255, 0.65);
+
           font-size: 16px;
           font-weight: 600;
-          text-shadow: 0 1px 4px #000;
+
+          text-shadow:
+            0 1px 4px rgba(0, 0, 0, 0.8);
         }
 
-        .header-item.active {
+        .top-tab.active {
           color: #fff;
           font-weight: 800;
         }
 
-        .header-item.active::after {
+        .top-tab.active::after {
           content: "";
+
           position: absolute;
+
           left: 50%;
-          bottom: -9px;
-          width: 22px;
+          bottom: -10px;
+
+          width: 23px;
           height: 3px;
+
           border-radius: 99px;
+
           background: #fff;
+
           transform: translateX(-50%);
         }
 
         .search-button {
           position: absolute;
-          right: 17px;
-          top: 17px;
 
-          width: 34px;
-          height: 34px;
+          right: 16px;
+          bottom: 13px;
+
+          width: 38px;
+          height: 38px;
 
           display: grid;
           place-items: center;
 
-          font-size: 23px;
-          text-shadow: 0 1px 5px #000;
+          color: #fff;
+
+          font-size: 27px;
+
+          text-shadow:
+            0 2px 5px rgba(0, 0, 0, 0.8);
+
+          pointer-events: auto;
         }
 
-        /* 右侧 */
+        /* =========================
+           静音
+        ========================= */
 
-        .side {
+        .sound-button {
           position: absolute;
-          z-index: 20;
 
-          right: 10px;
-          bottom: 112px;
+          z-index: 30;
+
+          top: 82px;
+          right: 16px;
+
+          width: 42px;
+          height: 42px;
+
+          display: grid;
+          place-items: center;
+
+          border-radius: 50%;
+
+          background: rgba(0, 0, 0, 0.35);
+
+          backdrop-filter: blur(8px);
+
+          font-size: 20px;
+
+          box-shadow:
+            0 2px 10px rgba(0, 0, 0, 0.25);
+        }
+
+        /* =========================
+           右侧操作
+        ========================= */
+
+        .action-bar {
+          position: absolute;
+
+          z-index: 30;
+
+          right: 9px;
+          bottom: 115px;
 
           width: 58px;
 
@@ -264,11 +403,11 @@ export default function Home() {
           flex-direction: column;
           align-items: center;
 
-          gap: 21px;
+          gap: 20px;
         }
 
-        .side-button {
-          width: 55px;
+        .action-button {
+          width: 58px;
 
           display: flex;
           flex-direction: column;
@@ -276,60 +415,68 @@ export default function Home() {
 
           gap: 4px;
 
-          text-shadow: 0 2px 5px #000;
+          text-shadow:
+            0 2px 5px rgba(0, 0, 0, 0.9);
         }
 
-        .side-icon {
-          width: 47px;
-          height: 47px;
+        .action-icon {
+          width: 49px;
+          height: 49px;
 
           display: grid;
           place-items: center;
 
           font-size: 31px;
-          font-weight: 400;
+
+          transition:
+            transform 0.15s ease,
+            color 0.15s ease;
         }
 
-        .side-count {
+        .action-count {
           font-size: 11px;
-          font-weight: 500;
+          line-height: 15px;
+
+          color: #fff;
         }
 
-        .heart {
-          transition: transform .15s;
+        .like-icon {
+          font-size: 35px;
         }
 
-        .heart.liked {
+        .like-icon.liked {
           color: #ff2d55;
-          transform: scale(1.15);
+
+          transform: scale(1.18);
         }
 
         .music-disc {
-          width: 48px;
-          height: 48px;
+          width: 49px;
+          height: 49px;
 
           display: grid;
           place-items: center;
 
           border-radius: 50%;
 
+          border: 3px solid rgba(255, 255, 255, 0.95);
+
           background:
             radial-gradient(
               circle,
-              #111 0 20%,
-              #777 21% 27%,
-              #111 28% 100%
+              #111 0 18%,
+              #777 19% 25%,
+              #111 26% 100%
             );
 
-          border: 3px solid rgba(255,255,255,.9);
+          font-size: 20px;
 
-          font-size: 18px;
-          animation: rotate 4s linear infinite;
+          animation: rotateDisc 4s linear infinite;
         }
 
-        @keyframes rotate {
+        @keyframes rotateDisc {
           from {
-            transform: rotate(0);
+            transform: rotate(0deg);
           }
 
           to {
@@ -337,26 +484,32 @@ export default function Home() {
           }
         }
 
-        /* 左下 */
+        /* =========================
+           视频信息
+        ========================= */
 
-        .content {
+        .video-info {
           position: absolute;
-          z-index: 20;
+
+          z-index: 30;
 
           left: 15px;
-          right: 78px;
-          bottom: 92px;
+          right: 80px;
+          bottom: 88px;
         }
 
-        .user-row {
+        .author-row {
           display: flex;
           align-items: center;
+
           gap: 9px;
         }
 
         .avatar {
-          width: 42px;
-          height: 42px;
+          flex: 0 0 auto;
+
+          width: 44px;
+          height: 44px;
 
           display: grid;
           place-items: center;
@@ -366,76 +519,97 @@ export default function Home() {
           background: #fff;
           color: #111;
 
-          font-size: 17px;
-          font-weight: 900;
+          border: 2px solid rgba(255, 255, 255, 0.9);
 
-          border: 2px solid rgba(255,255,255,.8);
+          font-size: 18px;
+          font-weight: 900;
         }
 
-        .username {
+        .author-name {
+          max-width: 145px;
+
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+
           font-size: 15px;
           font-weight: 800;
-          text-shadow: 0 1px 4px #000;
+
+          text-shadow:
+            0 2px 5px rgba(0, 0, 0, 0.9);
         }
 
-        .follow {
-          margin-left: 3px;
-
+        .follow-button {
           min-width: 54px;
-          height: 27px;
+          height: 28px;
 
           padding: 0 10px;
 
-          border: 1px solid rgba(255,255,255,.9);
+          border:
+            1px solid rgba(255, 255, 255, 0.9);
+
           border-radius: 5px;
+
+          color: #fff;
+
+          background: rgba(0, 0, 0, 0.15);
+
+          backdrop-filter: blur(5px);
 
           font-size: 12px;
           font-weight: 700;
-
-          background: rgba(255,255,255,.08);
-          backdrop-filter: blur(5px);
         }
 
-        .follow.active {
-          opacity: .65;
+        .follow-button.followed {
+          opacity: 0.65;
         }
 
-        .title {
-          margin: 13px 0 7px;
+        .video-title {
+          margin-top: 13px;
 
           font-size: 15px;
-          line-height: 1.45;
+          line-height: 1.5;
+
           font-weight: 500;
 
-          text-shadow: 0 1px 5px #000;
+          text-shadow:
+            0 2px 6px rgba(0, 0, 0, 0.9);
         }
 
-        .music {
+        .music-name {
           display: flex;
           align-items: center;
+
           gap: 5px;
 
-          font-size: 13px;
-          font-weight: 500;
+          margin-top: 7px;
 
-          white-space: nowrap;
+          max-width: 100%;
+
           overflow: hidden;
           text-overflow: ellipsis;
+          white-space: nowrap;
 
-          text-shadow: 0 1px 5px #000;
+          font-size: 13px;
+
+          text-shadow:
+            0 2px 5px rgba(0, 0, 0, 0.9);
         }
 
-        /* 底部 */
+        /* =========================
+           底部导航
+        ========================= */
 
-        .bottom {
+        .bottom-nav {
           position: fixed;
-          z-index: 100;
+
+          z-index: 200;
 
           left: 0;
           right: 0;
           bottom: 0;
 
-          height: 63px;
+          height: 67px;
 
           display: flex;
           align-items: center;
@@ -443,11 +617,13 @@ export default function Home() {
 
           padding-bottom: env(safe-area-inset-bottom);
 
-          background: rgba(0,0,0,.94);
+          background: rgba(0, 0, 0, 0.94);
+
+          backdrop-filter: blur(10px);
         }
 
-        .nav {
-          min-width: 55px;
+        .nav-button {
+          width: 58px;
 
           display: flex;
           flex-direction: column;
@@ -456,147 +632,151 @@ export default function Home() {
 
           gap: 3px;
 
-          color: rgba(255,255,255,.65);
+          color: rgba(255, 255, 255, 0.58);
         }
 
-        .nav.active {
+        .nav-button.active {
           color: #fff;
         }
 
         .nav-icon {
-          font-size: 22px;
-          line-height: 22px;
+          height: 24px;
+
+          display: flex;
+          align-items: center;
+
+          font-size: 23px;
+          line-height: 1;
         }
 
-        .nav-text {
+        .nav-label {
           font-size: 10px;
+          line-height: 14px;
         }
 
-        .publish {
-          width: 48px;
-          height: 34px;
-
-          display: grid;
-          place-items: center;
-
-          border-radius: 8px;
-
-          background: #fff;
-          color: #000;
-
-          font-size: 29px;
-          font-weight: 300;
-
-          box-shadow:
-            -5px 0 0 #555,
-            5px 0 0 #fff;
-        }
-
-        /* 声音 */
-
-        .sound {
-          position: absolute;
-          z-index: 30;
-
-          right: 16px;
-          top: 77px;
-
-          width: 35px;
+        .publish-button {
+          width: 49px;
           height: 35px;
 
           display: grid;
           place-items: center;
 
-          border-radius: 50%;
+          border-radius: 9px;
 
-          background: rgba(0,0,0,.35);
+          background: #fff;
+          color: #000;
 
-          backdrop-filter: blur(8px);
+          font-size: 30px;
+          font-weight: 300;
 
-          font-size: 17px;
+          box-shadow:
+            -5px 0 0 rgba(255, 255, 255, 0.35),
+            5px 0 0 rgba(255, 255, 255, 0.9);
         }
 
+        /* =========================
+           PC
+        ========================= */
+
         @media (min-width: 700px) {
-          .xingliu {
-            width: 430px;
+          .xingliu-app {
             left: 50%;
             right: auto;
+
+            width: 430px;
+
             transform: translateX(-50%);
 
             box-shadow:
-              0 0 80px rgba(0,0,0,.8);
+              0 0 100px rgba(0, 0, 0, 0.8);
           }
 
-          .header {
-            width: 430px;
+          .top-bar {
             left: 50%;
-            right: auto;
+
+            width: 430px;
+
             transform: translateX(-50%);
           }
 
-          .bottom {
-            width: 430px;
+          .bottom-nav {
             left: 50%;
-            right: auto;
+
+            width: 430px;
+
             transform: translateX(-50%);
           }
         }
       `}</style>
 
-      <main className="xingliu">
+      <main className="xingliu-app">
 
-        <header className="header">
+        {/* =========================
+            顶部导航
+        ========================= */}
 
-          <div className="header-inner">
+        <header className="top-bar">
 
-            <button className="header-item">
+          <div className="top-tabs">
+
+            <button className="top-tab">
               关注
             </button>
 
-            <button className="header-item active">
+            <button className="top-tab active">
               推荐
             </button>
 
           </div>
 
-          <button className="search-button">
+          <button
+            className="search-button"
+            aria-label="搜索"
+            onClick={() => {
+              alert("搜索功能即将上线");
+            }}
+          >
             ⌕
           </button>
 
         </header>
 
 
+        {/* =========================
+            视频流
+        ========================= */}
+
         <div
           ref={feedRef}
-          className="feed"
+          className="video-feed"
         >
 
           {videos.map((video, index) => {
 
             const isLiked =
-              liked.includes(video.id);
+              likedIds.includes(video.id);
 
             const isFollowed =
-              followed.includes(video.id);
+              followedIds.includes(video.id);
 
             return (
-
               <section
-                className="page"
                 key={video.id}
+                className="video-page"
               >
 
                 <video
                   ref={(element) => {
-                    videoRefs.current[index] = element;
+                    videoRefs.current[index] =
+                      element;
                   }}
-                  className="video"
+                  className="video-player"
                   src={video.src}
                   muted={muted}
                   loop
                   playsInline
-                  autoPlay={index === 0}
                   preload="metadata"
+                  autoPlay={index === 0}
                 />
 
 
@@ -605,38 +785,43 @@ export default function Home() {
                 <div className="bottom-gradient" />
 
 
+                {/* 静音 */}
+
                 <button
-                  className="sound"
-                  onClick={() =>
-                    setMuted((value) => !value)
-                  }
+                  className="sound-button"
+                  aria-label="声音"
+                  onClick={() => {
+                    setMuted((value) => !value);
+                  }}
                 >
                   {muted ? "🔇" : "🔊"}
                 </button>
 
 
-                {/* 右侧操作 */}
+                {/* =========================
+                    右侧操作栏
+                ========================= */}
 
-                <div className="side">
+                <aside className="action-bar">
 
                   <button
-                    className="side-button"
-                    onClick={() =>
-                      toggleLike(video.id)
-                    }
+                    className="action-button"
+                    onClick={() => {
+                      toggleLike(video.id);
+                    }}
                   >
 
                     <span
                       className={
                         isLiked
-                          ? "side-icon heart liked"
-                          : "side-icon heart"
+                          ? "action-icon like-icon liked"
+                          : "action-icon like-icon"
                       }
                     >
                       ♥
                     </span>
 
-                    <span className="side-count">
+                    <span className="action-count">
                       {video.likes +
                         (isLiked ? 1 : 0)}
                     </span>
@@ -644,26 +829,36 @@ export default function Home() {
                   </button>
 
 
-                  <button className="side-button">
+                  <button
+                    className="action-button"
+                    onClick={() => {
+                      alert("评论功能即将上线");
+                    }}
+                  >
 
-                    <span className="side-icon">
+                    <span className="action-icon">
                       💬
                     </span>
 
-                    <span className="side-count">
+                    <span className="action-count">
                       {video.comments}
                     </span>
 
                   </button>
 
 
-                  <button className="side-button">
+                  <button
+                    className="action-button"
+                    onClick={() => {
+                      alert("分享功能即将上线");
+                    }}
+                  >
 
-                    <span className="side-icon">
+                    <span className="action-icon">
                       ↗
                     </span>
 
-                    <span className="side-count">
+                    <span className="action-count">
                       分享
                     </span>
 
@@ -674,32 +869,34 @@ export default function Home() {
                     ♪
                   </div>
 
-                </div>
+                </aside>
 
 
-                {/* 视频信息 */}
+                {/* =========================
+                    视频信息
+                ========================= */}
 
-                <div className="content">
+                <div className="video-info">
 
-                  <div className="user-row">
+                  <div className="author-row">
 
                     <div className="avatar">
                       {video.username.slice(0, 1)}
                     </div>
 
-                    <span className="username">
+                    <span className="author-name">
                       @{video.username}
                     </span>
 
                     <button
                       className={
                         isFollowed
-                          ? "follow active"
-                          : "follow"
+                          ? "follow-button followed"
+                          : "follow-button"
                       }
-                      onClick={() =>
-                        toggleFollow(video.id)
-                      }
+                      onClick={() => {
+                        toggleFollow(video.id);
+                      }}
                     >
                       {isFollowed
                         ? "已关注"
@@ -709,93 +906,111 @@ export default function Home() {
                   </div>
 
 
-                  <div className="title">
+                  <div className="video-title">
                     {video.title}
                   </div>
 
 
-                  <div className="music">
+                  <div className="music-name">
                     ♪ {video.music}
                   </div>
 
                 </div>
 
               </section>
-
             );
           })}
 
         </div>
 
 
-        {/* 底部导航 */}
+        {/* =========================
+            底部导航
+        ========================= */}
 
-        <nav className="bottom">
+        <nav className="bottom-nav">
 
-          <button className="nav active">
+          <button
+            className="nav-button active"
+            onClick={() => {
+              feedRef.current?.scrollTo({
+                top: 0,
+                behavior: "smooth",
+              });
+            }}
+          >
             <span className="nav-icon">
               ⌂
             </span>
 
-            <span className="nav-text">
+            <span className="nav-label">
               首页
             </span>
           </button>
 
 
-          <button className="nav">
+          <button
+            className="nav-button"
+            onClick={() => {
+              alert("朋友功能即将上线");
+            }}
+          >
             <span className="nav-icon">
               ◎
             </span>
 
-            <span className="nav-text">
+            <span className="nav-label">
               朋友
             </span>
           </button>
 
 
-          <button className="publish">
-            +
-          </button>
-
-
-          <button className="nav">
-            <span className="nav-icon">
-              ♧
-            </span>
-
-            <span className="nav-text">
-              消息
-            </span>
-          </button>
-
-
           <button
-            className="nav"
+            className="publish-button"
+            aria-label="发布"
             onClick={() => {
               const user =
                 localStorage.getItem(
                   "xingliu-current-user"
                 );
 
-              onClick={() => {
-  const user = localStorage.getItem(
-    "xingliu-current-user"
-  );
+              if (!user) {
+                goAuth();
+                return;
+              }
 
-  if (user) {
-    window.location.href = "/profile";
-  } else {
-    window.location.href = "/auth";
-  }
-}}
-          
+              alert("视频发布功能马上上线");
+            }}
+          >
+            +
+          </button>
+
+
+          <button
+            className="nav-button"
+            onClick={() => {
+              alert("消息功能即将上线");
+            }}
+          >
+            <span className="nav-icon">
+              ♧
+            </span>
+
+            <span className="nav-label">
+              消息
+            </span>
+          </button>
+
+
+          <button
+            className="nav-button"
+            onClick={goProfile}
           >
             <span className="nav-icon">
               ◉
             </span>
 
-            <span className="nav-text">
+            <span className="nav-label">
               我
             </span>
           </button>
