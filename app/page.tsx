@@ -778,12 +778,18 @@ export default function Home() {
                   "xingliu-current-user"
                 );
 
-              if (user) {
-                alert("个人中心正在开发中");
-              } else {
-                window.location.href = "/auth";
-              }
-            }}
+              onClick={() => {
+  const user = localStorage.getItem(
+    "xingliu-current-user"
+  );
+
+  if (user) {
+    window.location.href = "/profile";
+  } else {
+    window.location.href = "/auth";
+  }
+}}
+          
           >
             <span className="nav-icon">
               ◉
