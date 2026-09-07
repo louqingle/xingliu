@@ -280,10 +280,23 @@ export default function Home() {
         </button>
 
 
-        <button className="nav">
-          <span>☺</span>
-          <small>我的</small>
-        </button>
+        <button
+  className="nav"
+  onClick={() => {
+    const user = localStorage.getItem(
+      "xingliu-current-user"
+    );
+
+    if (user) {
+      alert("个人中心正在开发中");
+    } else {
+      window.location.href = "/auth";
+    }
+  }}
+>
+  <span>☺</span>
+  <small>我的</small>
+</button>
 
       </nav>
 
