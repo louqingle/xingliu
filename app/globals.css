@@ -379,3 +379,186 @@ button {
     transform: translateX(-50%);
   }
 }
+/* =========================
+   登录 / 注册
+========================= */
+
+.auth-page {
+  width: 100%;
+  min-height: 100dvh;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 24px;
+
+  background:
+    radial-gradient(
+      circle at top,
+      #252525 0,
+      #090909 45%,
+      #000 100%
+    );
+}
+
+.auth-box {
+  width: 100%;
+  max-width: 390px;
+}
+
+.auth-logo {
+  text-align: center;
+
+  font-size: 42px;
+  font-weight: 900;
+
+  letter-spacing: 3px;
+}
+
+.auth-subtitle {
+  margin-top: 8px;
+
+  text-align: center;
+
+  font-size: 14px;
+
+  color: rgba(255,255,255,.55);
+}
+
+.auth-tabs {
+  display: flex;
+
+  margin-top: 42px;
+  margin-bottom: 25px;
+
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+
+.auth-tabs button {
+  position: relative;
+
+  flex: 1;
+
+  padding: 13px 0;
+
+  font-size: 16px;
+
+  color: rgba(255,255,255,.5);
+}
+
+.auth-tabs button.active {
+  color: #fff;
+  font-weight: 700;
+}
+
+.auth-tabs button.active::after {
+  content: "";
+
+  position: absolute;
+
+  left: 50%;
+  bottom: -1px;
+
+  width: 38px;
+  height: 3px;
+
+  border-radius: 10px;
+
+  background: #fff;
+
+  transform: translateX(-50%);
+}
+
+.field {
+  margin-bottom: 17px;
+}
+
+.field label {
+  display: block;
+
+  margin-bottom: 8px;
+
+  font-size: 13px;
+
+  color: rgba(255,255,255,.65);
+}
+
+.field input {
+  width: 100%;
+
+  height: 50px;
+
+  padding: 0 15px;
+
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 10px;
+
+  outline: none;
+
+  background: rgba(255,255,255,.07);
+
+  color: #fff;
+
+  font-size: 15px;
+
+  transition: .2s;
+}
+
+.field input::placeholder {
+  color: rgba(255,255,255,.32);
+}
+
+.field input:focus {
+  border-color: rgba(255,255,255,.5);
+  background: rgba(255,255,255,.1);
+}
+
+.auth-error {
+  margin: 4px 0 15px;
+
+  padding: 11px 13px;
+
+  border-radius: 8px;
+
+  background: rgba(255,70,70,.12);
+
+  color: #ff8585;
+
+  font-size: 13px;
+}
+
+.submit-button {
+  width: 100%;
+  height: 50px;
+
+  margin-top: 5px;
+
+  border-radius: 10px;
+
+  background: #fff;
+  color: #000;
+
+  font-size: 15px;
+  font-weight: 700;
+
+  transition: transform .15s, opacity .15s;
+}
+
+.submit-button:active {
+  transform: scale(.98);
+}
+
+.submit-button:disabled {
+  opacity: .55;
+}
+
+.auth-tip {
+  margin-top: 20px;
+
+  text-align: center;
+
+  color: rgba(255,255,255,.38);
+
+  font-size: 12px;
+}
