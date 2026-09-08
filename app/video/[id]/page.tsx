@@ -9,16 +9,52 @@ import "./detail.css";
 type Video={id:string;url:string;title:string|null;music:string|null;like_count:number;comment_count:number;user_id:string;created_at:string;profile:any};
 type Comment={id:string;content:string;created_at:string;user_id:string;username:string;avatar_url:string|null};
 const fmt=(n:number)=>n>=10000?`${(n/10000).toFixed(1).replace(".0","")}万`:n.toLocaleString("zh-CN");
+const videoFields="id,url,title,music,like_count,comment_count,user_id,created_at";
 
 export default function VideoPage(){
  const params=useParams<{id:string}>();const router=useRouter();const id=params?.id;
  const [videos,setVideos]=useState<Video[]>([]),[index,setIndex]=useState(0),[comments,setComments]=useState<Comment[]>([]),[userId,setUserId]=useState<string|null>(null),[liked,setLiked]=useState(false),[saved,setSaved]=useState(false),[following,setFollowing]=useState(false),[text,setText]=useState(""),[loading,setLoading]=useState(true),[sending,setSending]=useState(false),[toast,setToast]=useState("");
  const feedRef=useRef<HTMLDivElement>(null);
  const video=videos[index]||null;
- useEffect(()=>{let alive=true;(async()=>{if(!supabase||!id){setLoading(false);return}const [{data:{session}},{data:v,error}]=await Promise.all([supabase.auth.getSession(),supabase.from("videos").select("id,url,title,music,like_count,comment_count,user_id,created_at,profiles(username,nickname,avatar_url)").eq("id",id).maybeSingle()]);if(!alive)return;const uid=session?.user.id??null;setUserId(uid);if(error||!v){setLoading(false);return}const [{data:others}]=await Promise.all([supabase.from("videos").select("id,url,title,music,like_count,comment_count,user_id,created_at,profiles(username,nickname,avatar_url)").order("created_at",{ascending:false}).range(0,39)]);const all=[v,...(others||[]).filter((x:any)=>x.id!==v.id)].map((x:any)=>({...x,profile:Array.isArray(x.profiles)?x.profiles[0]:x.profiles}));setVideos(all);setIndex(0);await syncState(v.id,uid);setLoading(false)})();return()=>{alive=false}},[id]);
+
+ useEffect(()=>{let alive=true;(async()=>{
+   if(!supabase||!id){if(alive)setLoading(false);return}
+   const {data:{session}}=await supabase.auth.getSession();
+   if(!alive)return;
+   const uid=session?.user.id??null;setUserId(uid);
+
+   // First fetch the exact video by id without a profile join. This avoids a
+   // relationship error making an existing published work look nonexistent.
+   let target:any=null;
+   let targetError:any=null;
+   const joined=await supabase.from("videos").select(`${videoFields},profiles(username,nickname,avatar_url)`).eq("id",id).maybeSingle();
+   if(joined.data){target=joined.data}else{
+     targetError=joined.error;
+     const plain=await supabase.from("videos").select(videoFields).eq("id",id).maybeSingle();
+     target=plain.data;targetError=plain.error;
+     if(target){
+       const p=await supabase.from("profiles").select("username,nickname,avatar_url").eq("id",target.user_id).maybeSingle();
+       target.profiles=p.data||null;
+     }
+   }
+   if(!alive)return;
+   if(targetError||!target){setLoading(false);return}
+
+   // Load the surrounding feed separately. Failure here must never invalidate
+   // the exact work the user opened.
+   const othersRes=await supabase.from("videos").select(`${videoFields},profiles(username,nickname,avatar_url)`).eq("status","published").order("created_at",{ascending:false}).range(0,39);
+   const targetNormalized={...target,profile:Array.isArray(target.profiles)?target.profiles[0]:target.profiles};
+   const others=(othersRes.data||[]).map((x:any)=>({...x,profile:Array.isArray(x.profiles)?x.profiles[0]:x.profiles}));
+   const all=[targetNormalized,...others.filter((x:any)=>x.id!==targetNormalized.id)];
+   setVideos(all);setIndex(0);
+   await syncState(targetNormalized,uid);
+   if(alive)setLoading(false);
+ })();return()=>{alive=false}},[id]);
+
  useEffect(()=>{const el=feedRef.current;if(!el)return;const onScroll=()=>{const next=Math.round(el.scrollTop/el.clientHeight);if(next!==index&&next>=0&&next<videos.length)setIndex(next)};el.addEventListener("scroll",onScroll,{passive:true});return()=>el.removeEventListener("scroll",onScroll)},[index,videos.length]);
- useEffect(()=>{if(video)syncState(video.id,userId)},[index]);
- async function syncState(videoId:string,uid:string|null){if(!supabase)return;setComments([]);setLiked(false);setSaved(false);setFollowing(false);const {data:cs}=await supabase.from("comments").select("id,content,created_at,user_id").eq("video_id",videoId).order("created_at",{ascending:false}).limit(100);const rows=cs||[];const ids=[...new Set(rows.map((x:any)=>x.user_id))];let ps:any[]=[];if(ids.length){const r=await supabase.from("profiles").select("id,username,nickname,avatar_url").in("id",ids);ps=r.data||[]}setComments(rows.map((x:any)=>{const p=ps.find((z:any)=>z.id===x.user_id);return {...x,username:p?.username||p?.nickname||"星流用户",avatar_url:p?.avatar_url||null}}));if(uid){const [{data:l},{data:f}]=await Promise.all([supabase.from("likes").select("video_id").eq("user_id",uid).eq("video_id",videoId).maybeSingle(),supabase.from("follows").select("following_id").eq("follower_id",uid).eq("following_id",video?.user_id||"").maybeSingle()]);setLiked(!!l);setFollowing(!!f);await supabase.from("video_events").insert({user_id:uid,video_id:videoId,event_type:"impression"})}}
+ useEffect(()=>{if(video)syncState(video,userId)},[index]);
+
+ async function syncState(v:Video,uid:string|null){if(!supabase)return;setComments([]);setLiked(false);setSaved(false);setFollowing(false);const {data:cs}=await supabase.from("comments").select("id,content,created_at,user_id").eq("video_id",v.id).order("created_at",{ascending:false}).limit(100);const rows=cs||[];const ids=[...new Set(rows.map((x:any)=>x.user_id))];let ps:any[]=[];if(ids.length){const r=await supabase.from("profiles").select("id,username,nickname,avatar_url").in("id",ids);ps=r.data||[]}setComments(rows.map((x:any)=>{const p=ps.find((z:any)=>z.id===x.user_id);return {...x,username:p?.username||p?.nickname||"星流用户",avatar_url:p?.avatar_url||null}}));if(uid){const [{data:l},{data:f}]=await Promise.all([supabase.from("likes").select("video_id").eq("user_id",uid).eq("video_id",v.id).maybeSingle(),supabase.from("follows").select("following_id").eq("follower_id",uid).eq("following_id",v.user_id).maybeSingle()]);setLiked(!!l);setFollowing(!!f);await supabase.from("video_events").insert({user_id:uid,video_id:v.id,event_type:"impression"})}}
  function needLogin(){setToast("登录后才能操作");setTimeout(()=>router.push("/auth"),450)}
  async function toggleLike(){if(!video||!supabase)return;if(!userId)return needLogin();const next=!liked;setLiked(next);setVideos(vs=>vs.map(v=>v.id===video.id?{...v,like_count:Math.max(0,v.like_count+(next?1:-1))}:v));const q=next?supabase.from("likes").insert({video_id:video.id,user_id:userId}):supabase.from("likes").delete().eq("video_id",video.id).eq("user_id",userId);await q;await supabase.from("video_events").insert({user_id:userId,video_id:video.id,event_type:next?"like":"unlike"})}
  async function toggleFollow(){if(!video||!supabase)return;if(!userId)return needLogin();if(video.user_id===userId)return;const next=!following;setFollowing(next);if(next)await supabase.from("follows").insert({follower_id:userId,following_id:video.user_id});else await supabase.from("follows").delete().eq("follower_id",userId).eq("following_id",video.user_id)}
@@ -27,7 +63,7 @@ export default function VideoPage(){
  function save(){if(!video)return;if(!userId)return needLogin();setSaved(v=>!v);setToast(saved?"已取消收藏":"已收藏")}
  function jump(dir:number){const n=Math.max(0,Math.min(videos.length-1,index+dir));feedRef.current?.scrollTo({top:n*window.innerHeight,behavior:"smooth"})}
  if(loading)return <main className="video-detail-loading">正在加载视频…</main>;
- if(!video)return <main className="video-detail-loading"><div><h2>视频不存在</h2><button onClick={()=>router.back()}>返回</button></div></main>;
- const name=video.profile?.username||video.profile?.nickname||"星流用户",avatar=video.profile?.avatar_url,initial=(video.profile?.nickname||name||"星").slice(0,1);
- return <main className="video-feed-shell"><header className="swipe-head"><button onClick={()=>router.back()}><ArrowLeft/></button><strong>星流</strong><span>{index+1}/{videos.length}</span></header><div className="swipe-feed" ref={feedRef}>{videos.map((v,i)=>{const p=v.profile||{};const nm=p.username||p.nickname||"星流用户";const av=p.avatar_url;return <article className="swipe-video" key={v.id}><video className="swipe-player" src={v.url} controls={i===index} autoPlay={i===index} muted={i!==index} playsInline loop preload={Math.abs(i-index)<=1?"metadata":"none"}/><div className="swipe-shade"/><div className="swipe-info"><button className="swipe-author" onClick={()=>router.push(`/u/${v.user_id}`)}>{av?<img src={av} alt=""/>:nm.slice(0,1)}</button><div><button className="swipe-name" onClick={()=>router.push(`/u/${v.user_id}`)}>@{nm}</button><h1>{v.title||""}</h1><p>♫ {v.music||"原创音乐 · 星流"}</p></div></div>{i===index&&<aside className="swipe-actions"><button onClick={toggleLike} className={liked?"on":""}><Heart fill={liked?"currentColor":"none"}/><b>{fmt(v.like_count)}</b></button><button onClick={()=>document.getElementById("comment-input")?.focus()}><MessageCircle/><b>{fmt(v.comment_count)}</b></button><button onClick={save} className={saved?"saved":""}><Bookmark fill={saved?"currentColor":"none"}/><b>收藏</b></button><button onClick={share}><Share2/><b>分享</b></button><button onClick={toggleFollow} disabled={v.user_id===userId} className="mini-follow">{v.user_id===userId?"我":"+"}</button></aside>}</article>})}</div><div className="swipe-arrows"><button onClick={()=>jump(-1)} disabled={index===0}><ChevronUp/></button><button onClick={()=>jump(1)} disabled={index===videos.length-1}><ChevronDown/></button></div><nav className="detail-bottom"><button onClick={()=>router.push("/")}><UserRound/><span>首页</span></button><button onClick={()=>router.push("/upload")} className="detail-plus">＋</button><button onClick={()=>router.push(userId?"/profile":"/auth")}><UserRound/><span>我</span></button></nav>{toast&&<div className="detail-toast">{toast}</div>}{comments.length>=0&&<div className="swipe-comment-bar"><form onSubmit={submit}><input id="comment-input" value={text} onChange={e=>setText(e.target.value)} placeholder={userId?"说点什么…":"登录后发表评论"} onFocus={()=>{if(!userId)needLogin()}}/><button disabled={sending||!text.trim()}><Send size={18}/></button></form><div className="swipe-comment-count">当前视频 {comments.length} 条评论</div></div>}</main>
+ if(!video)return <main className="video-detail-loading"><div><h2>作品不存在</h2><p style={{opacity:.65}}>这个作品可能刚刚发布，正在同步中。</p><button onClick={()=>router.push("/profile")}>返回我的作品</button></div></main>;
+ const name=video.profile?.username||video.profile?.nickname||"星流用户";
+ return <main className="video-feed-shell"><header className="swipe-head"><button onClick={()=>router.back()}><ArrowLeft/></button><strong>星流</strong><span>{index+1}/{videos.length}</span></header><div className="swipe-feed" ref={feedRef}>{videos.map((v,i)=>{const p=v.profile||{};const nm=p.username||p.nickname||"星流用户";const av=p.avatar_url;return <article className="swipe-video" key={v.id}><video className="swipe-player" src={v.url} controls={i===index} autoPlay={i===index} muted={i!==index} playsInline loop preload={Math.abs(i-index)<=1?"metadata":"none"}/><div className="swipe-shade"/><div className="swipe-info"><button className="swipe-author" onClick={()=>router.push(`/u/${v.user_id}`)}>{av?<img src={av} alt=""/>:nm.slice(0,1)}</button><div><button className="swipe-name" onClick={()=>router.push(`/u/${v.user_id}`)}>@{nm}</button><h1>{v.title||""}</h1><p>♫ {v.music||"原创音乐 · 星流"}</p></div></div>{i===index&&<aside className="swipe-actions"><button onClick={toggleLike} className={liked?"on":""}><Heart fill={liked?"currentColor":"none"}/><b>{fmt(v.like_count)}</b></button><button onClick={()=>document.getElementById("comment-input")?.focus()}><MessageCircle/><b>{fmt(v.comment_count)}</b></button><button onClick={save} className={saved?"saved":""}><Bookmark fill={saved?"currentColor":"none"}/><b>收藏</b></button><button onClick={share}><Share2/><b>分享</b></button><button onClick={toggleFollow} disabled={v.user_id===userId} className="mini-follow">{v.user_id===userId?"我":"+"}</button></aside>}</article>})}</div><div className="swipe-arrows"><button onClick={()=>jump(-1)} disabled={index===0}><ChevronUp/></button><button onClick={()=>jump(1)} disabled={index===videos.length-1}><ChevronDown/></button></div><nav className="detail-bottom"><button onClick={()=>router.push("/")}><UserRound/><span>首页</span></button><button onClick={()=>router.push("/upload")} className="detail-plus">＋</button><button onClick={()=>router.push(userId?"/profile":"/auth")}><UserRound/><span>我</span></button></nav>{toast&&<div className="detail-toast">{toast}</div>}<div className="swipe-comment-bar"><form onSubmit={submit}><input id="comment-input" value={text} onChange={e=>setText(e.target.value)} placeholder={userId?"说点什么…":"登录后发表评论"} onFocus={()=>{if(!userId)needLogin()}}/><button disabled={sending||!text.trim()}><Send size={18}/></button></form><div className="swipe-comment-count">当前视频 {comments.length} 条评论</div></div></main>
 }
