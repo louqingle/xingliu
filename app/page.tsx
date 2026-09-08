@@ -8,6 +8,7 @@ import { supabase } from "../lib/supabase";
 
 type VideoItem = { id:string; src:string; username:string; title:string; music:string; likes:number; comments:number; views:number; avatar:string; userId:string; createdAt:string };
 type CommentItem = { id:string; content:string; created_at:string; user_id:string; username:string; avatar_url:string|null };
+type EventItem = { video_id:string; event_type:string; watch_ms:number|null; created_at:string };
 
 const demoVideos: VideoItem[] = [
   {id:"demo-1",src:"https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",username:"星流用户",title:"欢迎来到星流，记录生活里值得被看见的瞬间。✨",music:"原创音乐 · 星流",likes:1280,comments:86,views:22000,avatar:"星",userId:"",createdAt:""},
@@ -15,6 +16,24 @@ const demoVideos: VideoItem[] = [
 ];
 
 const fmt=(n:number)=>n>=1000000?`${(n/1000000).toFixed(1)}M`:n>=10000?`${(n/10000).toFixed(1)}万`:n>=1000?`${(n/1000).toFixed(1)}K`:String(n);
+const tokenize=(s:string)=>s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(x=>x.length>1);
+
+function recommendationScore(v:VideoItem,events:EventItem[],followed:string[],liked:string[],now:number){
+  const ev=events.filter(e=>e.video_id===v.id);
+  const impressions=ev.filter(e=>e.event_type==="impression").length;
+  const watchSeconds=ev.filter(e=>e.event_type==="watch").reduce((s,e)=>s+(e.watch_ms||0),0)/1000;
+  const likedBefore=liked.includes(v.id)||ev.some(e=>e.event_type==="like");
+  const followedCreator=followed.includes(v.userId);
+  const ageDays=v.createdAt?Math.max(0,(now-new Date(v.createdAt).getTime())/86400000):30;
+  const freshness=Math.max(0,18-ageDays*1.7);
+  const engagement=Math.min(18,Math.log10(1+v.likes*2+v.comments*5)*5);
+  const watchAffinity=Math.min(24,watchSeconds/5);
+  const creatorAffinity=followedCreator?28:0;
+  const likeAffinity=likedBefore?20:0;
+  const seenPenalty=Math.min(35,impressions*8);
+  const exploration=Math.random()*5;
+  return freshness+engagement+watchAffinity+creatorAffinity+likeAffinity-seenPenalty+exploration;
+}
 
 export default function Home(){
   const router=useRouter();
@@ -26,15 +45,37 @@ export default function Home(){
 
   const loadFeed=useCallback(async(uid:string|null)=>{
     if(!supabase)return;
-    const {data}=await supabase.from("videos").select("id,url,title,music,like_count,comment_count,user_id,created_at,profiles(username,nickname,avatar_url)").eq("status","published").order("created_at",{ascending:false}).limit(60);
+    const {data}=await supabase.from("videos").select("id,url,title,music,like_count,comment_count,user_id,created_at,profiles(username,nickname,avatar_url)").eq("status","published").order("created_at",{ascending:false}).limit(80);
     if(!data?.length){setVideos(demoVideos);return;}
     const mapped:VideoItem[]=data.map((v:any)=>{const p=Array.isArray(v.profiles)?v.profiles[0]:v.profiles;const name=p?.username||p?.nickname||"星流用户";return{id:v.id,src:v.url,username:name,title:v.title||"",music:v.music||"原创音乐 · 星流",likes:v.like_count||0,comments:v.comment_count||0,views:0,avatar:(p?.nickname||p?.username||"星").slice(0,1),userId:v.user_id,createdAt:v.created_at};});
     if(!uid){setVideos(mapped);return;}
-    const {data:events}=await supabase.from("video_events").select("video_id,event_type,watch_ms,created_at").eq("user_id",uid).order("created_at",{ascending:false}).limit(500);
-    const list=events||[];
-    const score=(v:VideoItem)=>{const ev=list.filter((e:any)=>e.video_id===v.id);const watch=ev.filter((e:any)=>e.event_type==="watch").reduce((s:number,e:any)=>s+(e.watch_ms||0),0)/1000;const positive=ev.some((e:any)=>e.event_type==="like")?18:0;const seen=ev.filter((e:any)=>e.event_type==="impression").length;const recency=v.createdAt?Math.max(0,7-(Date.now()-new Date(v.createdAt).getTime())/86400000):0;return Math.log10(1+v.likes*2+v.comments*4)+recency+Math.min(watch/8,20)+positive-seen*1.5+(followed.includes(v.userId)?16:0);};
-    setVideos([...mapped].sort((a,b)=>score(b)-score(a)));
-  },[followed]);
+    const [{data:events},{data:followRows},{data:likeRows}]=await Promise.all([
+      supabase.from("video_events").select("video_id,event_type,watch_ms,created_at").eq("user_id",uid).order("created_at",{ascending:false}).limit(800),
+      supabase.from("follows").select("following_id").eq("follower_id",uid),
+      supabase.from("likes").select("video_id").eq("user_id",uid)
+    ]);
+    const eventList=(events||[]) as EventItem[];
+    const following=(followRows||[]).map((x:any)=>x.following_id);
+    const likedIds=(likeRows||[]).map((x:any)=>x.video_id);
+    const engagedCreator=new Map<string,number>();
+    for(const e of eventList){const owner=mapped.find(v=>v.id===e.video_id)?.userId;if(owner)engagedCreator.set(owner,(engagedCreator.get(owner)||0)+1);}
+    const interestTokens=new Map<string,number>();
+    for(const e of eventList.filter(e=>["like","comment","watch","share","save"].includes(e.event_type))){const v=mapped.find(x=>x.id===e.video_id);if(!v)continue;for(const t of tokenize(`${v.title} ${v.music}`))interestTokens.set(t,(interestTokens.get(t)||0)+1);}
+    const now=Date.now();
+    const score=(v:VideoItem)=>{
+      let s=recommendationScore(v,eventList,following,likedIds,now);
+      const creator=engagedCreator.get(v.userId)||0;
+      s+=Math.min(24,creator*3.5);
+      const terms=tokenize(`${v.title} ${v.music}`);
+      s+=Math.min(30,terms.reduce((n,t)=>n+(interestTokens.get(t)||0)*2.2,0));
+      if(v.userId===uid)s-=80;
+      return s;
+    };
+    const ranked=[...mapped].sort((a,b)=>score(b)-score(a));
+    const diversified:VideoItem[]=[];const creatorCount=new Map<string,number>();
+    for(const v of ranked){const count=creatorCount.get(v.userId)||0;if(count>=3&&diversified.length<ranked.length-2)continue;diversified.push(v);creatorCount.set(v.userId,count+1);}
+    setVideos(diversified.length?diversified:ranked);
+  },[]);
 
   useEffect(()=>{let alive=true;(async()=>{if(!supabase){setLoading(false);return;}const {data:{session}}=await supabase.auth.getSession();if(!alive)return;const uid=session?.user.id??null;setUserId(uid);await loadFeed(uid);if(alive)setLoading(false);})();return()=>{alive=false};},[loadFeed]);
   useEffect(()=>{if(!supabase)return;const {data:sub}=supabase.auth.onAuthStateChange((_e,s)=>setUserId(s?.user.id??null));return()=>sub.subscription.unsubscribe();},[]);
@@ -44,7 +85,7 @@ export default function Home(){
   const active=feedVideos[current]||feedVideos[0];
 
   useEffect(()=>{setCurrent(0);setPaused(false);feedRef.current?.scrollTo({top:0,behavior:"smooth"});},[tab]);
-  useEffect(()=>{const el=feedRef.current;if(!el)return;const onScroll=()=>{const h=window.innerHeight||1;const n=Math.max(0,Math.min(Math.max(feedVideos.length-1,0),Math.round(el.scrollTop/h)));setCurrent(n);};el.addEventListener("scroll",onScroll,{passive:true});return()=>el.removeEventListener("scroll",onScroll);},[feedVideos.length]);
+  useEffect(()=>{const el=feedRef.current;if(!el)return;const onScroll=()=>{const h=el.clientHeight||window.innerHeight||1;setCurrent(Math.max(0,Math.min(Math.max(feedVideos.length-1,0),Math.round(el.scrollTop/h))));};el.addEventListener("scroll",onScroll,{passive:true});return()=>el.removeEventListener("scroll",onScroll);},[feedVideos.length]);
   useEffect(()=>{Object.entries(videoRefs.current).forEach(([id,v])=>{if(!v)return;v.muted=muted;if(id===active?.id&&!paused)v.play().catch(()=>{});else v.pause();});tick.current=Date.now();if(active&&!active.id.startsWith("demo-")&&userId&&supabase)supabase.from("video_events").insert({user_id:userId,video_id:active.id,event_type:"impression"});},[active?.id,muted,paused,userId]);
   useEffect(()=>{if(!active||active.id.startsWith("demo-")||!userId||!supabase)return;const t=window.setInterval(()=>{if(paused)return;const d=Math.max(0,Date.now()-tick.current);tick.current=Date.now();timers.current[active.id]=(timers.current[active.id]||0)+d;if(timers.current[active.id]>=3000){const ms=timers.current[active.id];timers.current[active.id]=0;supabase.from("video_events").insert({user_id:userId,video_id:active.id,event_type:"watch",watch_ms:ms});}},3000);return()=>window.clearInterval(t);},[active?.id,userId,paused]);
   useEffect(()=>{if(!toast)return;const t=window.setTimeout(()=>setToast(""),1800);return()=>window.clearTimeout(t)},[toast]);
@@ -58,7 +99,7 @@ export default function Home(){
   async function openComments(){if(!active)return;if(!userId)return login();setCommentOpen(true);if(active.id.startsWith("demo-")||!supabase)return;const {data}=await supabase.from("comments").select("id,content,created_at,user_id").eq("video_id",active.id).order("created_at",{ascending:false}).limit(100);const rows=data||[];const ids=[...new Set(rows.map((x:any)=>x.user_id))];let profiles:any[]=[];if(ids.length){const r=await supabase.from("profiles").select("id,username,nickname,avatar_url").in("id",ids);profiles=r.data||[];}setComments(rows.map((x:any)=>{const p=profiles.find((z:any)=>z.id===x.user_id);return{id:x.id,content:x.content,created_at:x.created_at,user_id:x.user_id,username:p?.username||p?.nickname||"星流用户",avatar_url:p?.avatar_url||null};}));}
   async function submitComment(e:React.FormEvent){e.preventDefault();const text=comment.trim();if(!text||!active||!userId||!supabase)return;if(active.id.startsWith("demo-")){setToast("示例视频暂不支持评论");return;}const {data,error}=await supabase.from("comments").insert({video_id:active.id,user_id:userId,content:text}).select("id,content,created_at,user_id").single();if(error||!data){setToast("评论失败");return;}setComments(x=>[{...data,username:"我",avatar_url:null},...x]);setVideos(x=>x.map(v=>v.id===active.id?{...v,comments:v.comments+1}:v));setComment("");await track("comment",active.id);}
   const results=useMemo(()=>{const q=query.trim().toLowerCase();return(q?feedVideos.filter(v=>`${v.username} ${v.title} ${v.music}`.toLowerCase().includes(q)):feedVideos).slice(0,12)},[query,feedVideos]);
-  function jump(v:VideoItem){const i=feedVideos.findIndex(x=>x.id===v.id);setSearchOpen(false);if(i>=0)feedRef.current?.scrollTo({top:i*window.innerHeight,behavior:"smooth"});}
+  function jump(v:VideoItem){const i=feedVideos.findIndex(x=>x.id===v.id);setSearchOpen(false);if(i>=0)feedRef.current?.scrollTo({top:i*(feedRef.current?.clientHeight||window.innerHeight),behavior:"smooth"});}
 
   if(loading)return <main className="app"><div className="loading">正在进入星流…</div></main>;
   return <main className="app">
