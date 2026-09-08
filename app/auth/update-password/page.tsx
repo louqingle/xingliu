@@ -2,13 +2,16 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { CheckCircle2, LockKeyhole } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+
+function safeReturnTo(value: string | null) {
+  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/";
+}
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
-  const params = useSearchParams();
-  const returnTo = params.get("returnTo")?.startsWith("/") && !params.get("returnTo")?.startsWith("//") ? params.get("returnTo")! : "/";
+  const [returnTo, setReturnTo] = useState("/");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [ready, setReady] = useState(false);
@@ -17,14 +20,23 @@ export default function UpdatePasswordPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    setReturnTo(safeReturnTo(new URLSearchParams(window.location.search).get("returnTo")));
     if (!supabase) return;
-    const { data } = supabase.auth.onAuthStateChange((event) => { if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") setReady(true); });
-    supabase.auth.getSession().then(({ data: sessionData }) => { if (sessionData.session) setReady(true); });
+
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") setReady(true);
+    });
+
+    supabase.auth.getSession().then(({ data: sessionData }) => {
+      if (sessionData.session) setReady(true);
+    });
+
     return () => data.subscription.unsubscribe();
   }, []);
 
   async function submit(e: FormEvent) {
-    e.preventDefault(); setError("");
+    e.preventDefault();
+    setError("");
     if (password.length < 6) { setError("密码至少需要 6 位"); return; }
     if (password !== confirm) { setError("两次输入的密码不一致"); return; }
     if (!supabase) { setError("登录服务未配置"); return; }
