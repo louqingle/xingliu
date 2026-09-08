@@ -18,21 +18,24 @@ const demoVideos: VideoItem[] = [
 const fmt=(n:number)=>n>=1000000?`${(n/1000000).toFixed(1)}M`:n>=10000?`${(n/10000).toFixed(1)}万`:n>=1000?`${(n/1000).toFixed(1)}K`:String(n);
 const tokenize=(s:string)=>s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu," ").split(/\s+/).filter(x=>x.length>1);
 
+function stableExplore(id:string){let h=0;for(let i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))>>>0;return(h%1000)/1000*5;}
+
 function recommendationScore(v:VideoItem,events:EventItem[],followed:string[],liked:string[],now:number){
   const ev=events.filter(e=>e.video_id===v.id);
   const impressions=ev.filter(e=>e.event_type==="impression").length;
   const watchSeconds=ev.filter(e=>e.event_type==="watch").reduce((s,e)=>s+(e.watch_ms||0),0)/1000;
+  const completed=ev.filter(e=>e.event_type==="complete").length;
   const likedBefore=liked.includes(v.id)||ev.some(e=>e.event_type==="like");
   const followedCreator=followed.includes(v.userId);
   const ageDays=v.createdAt?Math.max(0,(now-new Date(v.createdAt).getTime())/86400000):30;
   const freshness=Math.max(0,18-ageDays*1.7);
   const engagement=Math.min(18,Math.log10(1+v.likes*2+v.comments*5)*5);
   const watchAffinity=Math.min(24,watchSeconds/5);
+  const completionAffinity=Math.min(20,completed*8);
   const creatorAffinity=followedCreator?28:0;
   const likeAffinity=likedBefore?20:0;
   const seenPenalty=Math.min(35,impressions*8);
-  const exploration=Math.random()*5;
-  return freshness+engagement+watchAffinity+creatorAffinity+likeAffinity-seenPenalty+exploration;
+  return freshness+engagement+watchAffinity+completionAffinity+creatorAffinity+likeAffinity-seenPenalty+stableExplore(v.id);
 }
 
 export default function Home(){
@@ -41,6 +44,8 @@ export default function Home(){
   const videoRefs=useRef<Record<string,HTMLVideoElement|null>>({});
   const timers=useRef<Record<string,number>>({});
   const tick=useRef(Date.now());
+  const wasPlayingRef=useRef(false);
+  const retryRef=useRef<Record<string,boolean>>({});
   const [videos,setVideos]=useState<VideoItem[]>(demoVideos),[current,setCurrent]=useState(0),[liked,setLiked]=useState<string[]>([]),[saved,setSaved]=useState<string[]>([]),[followed,setFollowed]=useState<string[]>([]),[muted,setMuted]=useState(true),[paused,setPaused]=useState(false),[tab,setTab]=useState<"推荐"|"关注">("推荐"),[userId,setUserId]=useState<string|null>(null),[loading,setLoading]=useState(true),[toast,setToast]=useState(""),[searchOpen,setSearchOpen]=useState(false),[query,setQuery]=useState(""),[commentOpen,setCommentOpen]=useState(false),[comments,setComments]=useState<CommentItem[]>([]),[comment,setComment]=useState("");
 
   const loadFeed=useCallback(async(uid:string|null)=>{
@@ -57,10 +62,11 @@ export default function Home(){
     const eventList=(events||[]) as EventItem[];
     const following=(followRows||[]).map((x:any)=>x.following_id);
     const likedIds=(likeRows||[]).map((x:any)=>x.video_id);
+    const byId=new Map(mapped.map(v=>[v.id,v]));
     const engagedCreator=new Map<string,number>();
-    for(const e of eventList){const owner=mapped.find(v=>v.id===e.video_id)?.userId;if(owner)engagedCreator.set(owner,(engagedCreator.get(owner)||0)+1);}
+    for(const e of eventList){const owner=byId.get(e.video_id)?.userId;if(owner)engagedCreator.set(owner,(engagedCreator.get(owner)||0)+1);}
     const interestTokens=new Map<string,number>();
-    for(const e of eventList.filter(e=>["like","comment","watch","share","save"].includes(e.event_type))){const v=mapped.find(x=>x.id===e.video_id);if(!v)continue;for(const t of tokenize(`${v.title} ${v.music}`))interestTokens.set(t,(interestTokens.get(t)||0)+1);}
+    for(const e of eventList.filter(e=>["like","comment","watch","share","save","complete"].includes(e.event_type))){const v=byId.get(e.video_id);if(!v)continue;for(const t of tokenize(`${v.title} ${v.music}`))interestTokens.set(t,(interestTokens.get(t)||0)+1);}
     const now=Date.now();
     const score=(v:VideoItem)=>{
       let s=recommendationScore(v,eventList,following,likedIds,now);
@@ -86,8 +92,19 @@ export default function Home(){
 
   useEffect(()=>{setCurrent(0);setPaused(false);feedRef.current?.scrollTo({top:0,behavior:"smooth"});},[tab]);
   useEffect(()=>{const el=feedRef.current;if(!el)return;const onScroll=()=>{const h=el.clientHeight||window.innerHeight||1;setCurrent(Math.max(0,Math.min(Math.max(feedVideos.length-1,0),Math.round(el.scrollTop/h))));};el.addEventListener("scroll",onScroll,{passive:true});return()=>el.removeEventListener("scroll",onScroll);},[feedVideos.length]);
-  useEffect(()=>{Object.entries(videoRefs.current).forEach(([id,v])=>{if(!v)return;v.muted=muted;if(id===active?.id&&!paused)v.play().catch(()=>{});else v.pause();});tick.current=Date.now();if(active&&!active.id.startsWith("demo-")&&userId&&supabase)supabase.from("video_events").insert({user_id:userId,video_id:active.id,event_type:"impression"});},[active?.id,muted,paused,userId]);
-  useEffect(()=>{if(!active||active.id.startsWith("demo-")||!userId||!supabase)return;const t=window.setInterval(()=>{if(paused)return;const d=Math.max(0,Date.now()-tick.current);tick.current=Date.now();timers.current[active.id]=(timers.current[active.id]||0)+d;if(timers.current[active.id]>=3000){const ms=timers.current[active.id];timers.current[active.id]=0;supabase.from("video_events").insert({user_id:userId,video_id:active.id,event_type:"watch",watch_ms:ms});}},3000);return()=>window.clearInterval(t);},[active?.id,userId,paused]);
+
+  const flushWatch=useCallback(async(id:string)=>{if(!supabase||!userId||id.startsWith("demo-"))return;const ms=timers.current[id]||0;if(ms<500)return;timers.current[id]=0;await supabase.from("video_events").insert({user_id:userId,video_id:id,event_type:"watch",watch_ms:ms});},[userId]);
+
+  useEffect(()=>{
+    Object.entries(videoRefs.current).forEach(([id,v])=>{if(!v)return;v.muted=muted;if(id===active?.id&&!paused)v.play().catch(()=>{});else v.pause();});
+    tick.current=Date.now();
+    if(active&&!active.id.startsWith("demo-")&&userId&&supabase)supabase.from("video_events").insert({user_id:userId,video_id:active.id,event_type:"impression"});
+  },[active?.id,muted,paused,userId]);
+
+  useEffect(()=>{if(!active||active.id.startsWith("demo-")||!userId||!supabase)return;const t=window.setInterval(()=>{const el=videoRefs.current[active.id];if(document.visibilityState!=="visible"||paused||!el||el.paused){tick.current=Date.now();return;}const d=Math.max(0,Date.now()-tick.current);tick.current=Date.now();timers.current[active.id]=(timers.current[active.id]||0)+d;if(timers.current[active.id]>=3000){const ms=timers.current[active.id];timers.current[active.id]=0;supabase.from("video_events").insert({user_id:userId,video_id:active.id,event_type:"watch",watch_ms:ms});}},1000);return()=>window.clearInterval(t);},[active?.id,userId,paused]);
+
+  useEffect(()=>{const onVisibility=()=>{const el=active?videoRefs.current[active.id]:null;if(document.visibilityState==="hidden"){wasPlayingRef.current=!!el&&!el.paused&&!paused;el?.pause();tick.current=Date.now();}else if(wasPlayingRef.current&&!paused){el?.play().catch(()=>{});tick.current=Date.now();}};document.addEventListener("visibilitychange",onVisibility);return()=>document.removeEventListener("visibilitychange",onVisibility)},[active?.id,paused]);
+  useEffect(()=>{return()=>{if(active)void flushWatch(active.id)}},[active?.id,flushWatch]);
   useEffect(()=>{if(!toast)return;const t=window.setTimeout(()=>setToast(""),1800);return()=>window.clearTimeout(t)},[toast]);
 
   async function track(type:string,id=active?.id){if(supabase&&userId&&id&&!id.startsWith("demo-"))await supabase.from("video_events").insert({user_id:userId,video_id:id,event_type:type});}
@@ -100,12 +117,14 @@ export default function Home(){
   async function submitComment(e:React.FormEvent){e.preventDefault();const text=comment.trim();if(!text||!active||!userId||!supabase)return;if(active.id.startsWith("demo-")){setToast("示例视频暂不支持评论");return;}const {data,error}=await supabase.from("comments").insert({video_id:active.id,user_id:userId,content:text}).select("id,content,created_at,user_id").single();if(error||!data){setToast("评论失败");return;}setComments(x=>[{...data,username:"我",avatar_url:null},...x]);setVideos(x=>x.map(v=>v.id===active.id?{...v,comments:v.comments+1}:v));setComment("");await track("comment",active.id);}
   const results=useMemo(()=>{const q=query.trim().toLowerCase();return(q?feedVideos.filter(v=>`${v.username} ${v.title} ${v.music}`.toLowerCase().includes(q)):feedVideos).slice(0,12)},[query,feedVideos]);
   function jump(v:VideoItem){const i=feedVideos.findIndex(x=>x.id===v.id);setSearchOpen(false);if(i>=0)feedRef.current?.scrollTo({top:i*(feedRef.current?.clientHeight||window.innerHeight),behavior:"smooth"});}
+  function handleVideoError(v:VideoItem,e:React.SyntheticEvent<HTMLVideoElement>){const el=e.currentTarget;if(retryRef.current[v.id]){setToast("视频加载失败");return;}retryRef.current[v.id]=true;const sep=v.src.includes("?")?"&":"?";el.src=`${v.src}${sep}retry=1`;el.load();el.play().catch(()=>{});}
+  function handleEnded(v:VideoItem,i:number){if(v.id.startsWith("demo-")){const next=Math.min(i+1,feedVideos.length-1);if(next>i)feedRef.current?.scrollTo({top:next*(feedRef.current?.clientHeight||window.innerHeight),behavior:"smooth"});return;}void track("complete",v.id);const next=Math.min(i+1,feedVideos.length-1);if(next>i)feedRef.current?.scrollTo({top:next*(feedRef.current?.clientHeight||window.innerHeight),behavior:"smooth"});}
 
   if(loading)return <main className="app"><div className="loading">正在进入星流…</div></main>;
   return <main className="app">
     <div className="feed" ref={feedRef}>
       {feedVideos.length===0?<section className="page" style={{display:"grid",placeItems:"center",padding:32}}><div style={{textAlign:"center"}}><Users size={48}/><h2>关注的人还没有作品</h2><p style={{opacity:.65}}>先去推荐页发现喜欢的创作者</p><button className="follow" onClick={()=>setTab("推荐")}>去推荐</button></div></section>:feedVideos.map((v,i)=>{const isLike=liked.includes(v.id),isSave=saved.includes(v.id),isFollow=followed.includes(v.userId);return <section className="page" key={v.id}>
-        <video ref={el=>{videoRefs.current[v.id]=el}} className="video" src={v.src} muted={muted} loop playsInline preload={i<=current+1?"auto":"metadata"} onClick={()=>setPaused(x=>!x)} onDoubleClick={()=>like(v)}/>
+        <video ref={el=>{videoRefs.current[v.id]=el}} className="video" src={v.src} muted={muted} loop={false} playsInline preload={i<=current+1?"auto":"metadata"} onClick={()=>setPaused(x=>!x)} onDoubleClick={()=>like(v)} onEnded={()=>handleEnded(v,i)} onError={e=>handleVideoError(v,e)}/>
         <div className="shade top"/><div className="shade bottom"/>
         {paused&&i===current&&<button className="pause" onClick={()=>setPaused(false)}><Play size={34} fill="white"/></button>}
         <div className="topbar"><div className="tabs"><button className={tab==="关注"?"tab active":"tab"} onClick={()=>setTab("关注")}>关注</button><button className={tab==="推荐"?"tab active":"tab"} onClick={()=>setTab("推荐")}>推荐</button></div><button className="iconBtn" onClick={()=>setSearchOpen(true)}><Search size={25}/></button></div>
