@@ -68,15 +68,7 @@ export default function Home(){
     const interestTokens=new Map<string,number>();
     for(const e of eventList.filter(e=>["like","comment","watch","share","save","complete"].includes(e.event_type))){const v=byId.get(e.video_id);if(!v)continue;for(const t of tokenize(`${v.title} ${v.music}`))interestTokens.set(t,(interestTokens.get(t)||0)+1);}
     const now=Date.now();
-    const score=(v:VideoItem)=>{
-      let s=recommendationScore(v,eventList,following,likedIds,now);
-      const creator=engagedCreator.get(v.userId)||0;
-      s+=Math.min(24,creator*3.5);
-      const terms=tokenize(`${v.title} ${v.music}`);
-      s+=Math.min(30,terms.reduce((n,t)=>n+(interestTokens.get(t)||0)*2.2,0));
-      if(v.userId===uid)s-=80;
-      return s;
-    };
+    const score=(v:VideoItem)=>{let s=recommendationScore(v,eventList,following,likedIds,now);const creator=engagedCreator.get(v.userId)||0;s+=Math.min(24,creator*3.5);const terms=tokenize(`${v.title} ${v.music}`);s+=Math.min(30,terms.reduce((n,t)=>n+(interestTokens.get(t)||0)*2.2,0));if(v.userId===uid)s-=80;return s;};
     const ranked=[...mapped].sort((a,b)=>score(b)-score(a));
     const diversified:VideoItem[]=[];const creatorCount=new Map<string,number>();
     for(const v of ranked){const count=creatorCount.get(v.userId)||0;if(count>=3&&diversified.length<ranked.length-2)continue;diversified.push(v);creatorCount.set(v.userId,count+1);}
@@ -91,7 +83,7 @@ export default function Home(){
   const active=feedVideos[current]||feedVideos[0];
 
   useEffect(()=>{setCurrent(0);setPaused(false);feedRef.current?.scrollTo({top:0,behavior:"smooth"});},[tab]);
-  useEffect(()=>{const el=feedRef.current;if(!el)return;const onScroll=()=>{const h=el.clientHeight||window.innerHeight||1;setCurrent(Math.max(0,Math.min(Math.max(feedVideos.length-1,0),Math.round(el.scrollTop/h))));};el.addEventListener("scroll",onScroll,{passive:true});return()=>el.removeEventListener("scroll",onScroll);},[feedVideos.length]);
+  useEffect(()=>{const el=feedRef.current;if(!el)return;let raf=0;const onScroll=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;const h=el.clientHeight||window.innerHeight||1;const next=Math.max(0,Math.min(Math.max(feedVideos.length-1,0),Math.round(el.scrollTop/h)));setCurrent(c=>c===next?c:next);});};el.addEventListener("scroll",onScroll,{passive:true});return()=>{el.removeEventListener("scroll",onScroll);if(raf)cancelAnimationFrame(raf);};},[feedVideos.length]);
 
   const flushWatch=useCallback(async(id:string)=>{if(!supabase||!userId||id.startsWith("demo-"))return;const ms=timers.current[id]||0;if(ms<500)return;timers.current[id]=0;await supabase.from("video_events").insert({user_id:userId,video_id:id,event_type:"watch",watch_ms:ms});},[userId]);
 
@@ -123,16 +115,16 @@ export default function Home(){
   if(loading)return <main className="app"><div className="loading">正在进入星流…</div></main>;
   return <main className="app">
     <div className="feed" ref={feedRef}>
-      {feedVideos.length===0?<section className="page" style={{display:"grid",placeItems:"center",padding:32}}><div style={{textAlign:"center"}}><Users size={48}/><h2>关注的人还没有作品</h2><p style={{opacity:.65}}>先去推荐页发现喜欢的创作者</p><button className="follow" onClick={()=>setTab("推荐")}>去推荐</button></div></section>:feedVideos.map((v,i)=>{const isLike=liked.includes(v.id),isSave=saved.includes(v.id),isFollow=followed.includes(v.userId);return <section className="page" key={v.id}>
-        <video ref={el=>{videoRefs.current[v.id]=el}} className="video" src={v.src} muted={muted} loop={false} playsInline preload={i<=current+1?"auto":"metadata"} onClick={()=>setPaused(x=>!x)} onDoubleClick={()=>like(v)} onEnded={()=>handleEnded(v,i)} onError={e=>handleVideoError(v,e)}/>
+      {feedVideos.length===0?<section className="page" style={{display:"grid",placeItems:"center",padding:32}}><div style={{textAlign:"center"}}><Users size={48}/><h2>关注的人还没有作品</h2><p style={{opacity:.65}}>先去推荐页发现喜欢的创作者</p><button className="follow" onClick={()=>setTab("推荐")}>去推荐</button></div></section>:feedVideos.map((v,i)=>{const isNear=Math.abs(i-current)<=1;const isLike=liked.includes(v.id),isSave=saved.includes(v.id),isFollow=followed.includes(v.userId);return <section className="page" key={v.id}>
+        {isNear&&<video ref={el=>{videoRefs.current[v.id]=el}} className="video" src={v.src} muted={muted} loop={false} playsInline preload={i===current?"auto":i===current+1?"auto":"metadata"} onClick={()=>i===current&&setPaused(x=>!x)} onDoubleClick={()=>like(v)} onEnded={()=>handleEnded(v,i)} onError={e=>handleVideoError(v,e)}/>} 
         <div className="shade top"/><div className="shade bottom"/>
         {paused&&i===current&&<button className="pause" onClick={()=>setPaused(false)}><Play size={34} fill="white"/></button>}
-        <div className="topbar"><div className="tabs"><button className={tab==="关注"?"tab active":"tab"} onClick={()=>setTab("关注")}>关注</button><button className={tab==="推荐"?"tab active":"tab"} onClick={()=>setTab("推荐")}>推荐</button></div><button className="iconBtn" onClick={()=>setSearchOpen(true)}><Search size={25}/></button></div>
-        <button className="sound" onClick={()=>setMuted(x=>!x)}>{muted?<VolumeX size={20}/>:<Volume2 size={20}/>}</button>
         <aside className="actions"><button className="action" onClick={()=>like(v)}><span className={isLike?"circle like on":"circle like"}><Heart size={30} fill={isLike?"currentColor":"none"}/></span><b>{fmt(v.likes)}</b></button><button className="action" onClick={openComments}><span className="circle"><MessageCircle size={29}/></span><b>{fmt(v.comments)}</b></button><button className="action" onClick={()=>save(v)}><span className={isSave?"circle saved":"circle"}><Bookmark size={28} fill={isSave?"currentColor":"none"}/></span><b>{isSave?"已收藏":"收藏"}</b></button><button className="action" onClick={share}><span className="circle"><Share2 size={28}/></span><b>分享</b></button><div className="disc">♪</div></aside>
         <div className="info"><div className="author"><Link className="avatar" href={v.userId?`/u/${v.userId}`:"/"}>{v.avatar}</Link><Link className="authorName" href={v.userId?`/u/${v.userId}`:"/"}>@{v.username}</Link>{v.userId&&v.userId!==userId&&<button className={isFollow?"follow followed":"follow"} onClick={()=>follow(v)}>{isFollow?"已关注":"+ 关注"}</button>}</div><div className="title">{v.title}</div><div className="music">♫ {v.music}</div></div>
       </section>})}
     </div>
+    <div className="topbar"><div className="tabs"><button className={tab==="关注"?"tab active":"tab"} onClick={()=>setTab("关注")}>关注</button><button className={tab==="推荐"?"tab active":"tab"} onClick={()=>setTab("推荐")}>推荐</button></div><button className="iconBtn" onClick={()=>setSearchOpen(true)}><Search size={25}/></button></div>
+    <button className="sound" onClick={()=>setMuted(x=>!x)}>{muted?<VolumeX size={20}/>:<Volume2 size={20}/>}</button>
     <nav className="nav"><Link className="navItem active" href="/"><HomeIcon/><span>首页</span></Link><Link className="navItem" href="/following"><Users/><span>关注</span></Link><Link className="navItem" href="/upload"><span className="publish"><Plus size={25}/></span></Link><Link className="navItem" href="/messages"><Inbox/><span>消息</span></Link><Link className="navItem" href={userId?"/profile":"/auth"}><UserRound/><span>我</span></Link></nav>
     {toast&&<div className="toast">{toast}</div>}
     {searchOpen&&<div className="modal"><div className="searchHead"><button onClick={()=>setSearchOpen(false)}><X/></button><div className="searchBox"><Search size={18}/><input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索创作者、作品、音乐"/></div></div><div className="results"><h3>{query?"搜索结果":"热门作品"}</h3>{results.map(v=><button className="result" key={v.id} onClick={()=>jump(v)}><span className="miniAvatar">{v.avatar}</span><span><b>@{v.username}</b><p>{v.title}</p></span></button>)}{!results.length&&<div className="empty-content">没有找到相关作品</div>}</div></div>}
