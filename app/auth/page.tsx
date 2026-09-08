@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowRight, CheckCircle2, Eye, EyeOff, KeyRound, Mail, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, Eye, EyeOff, KeyRound, Mail, ShieldCheck, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
@@ -39,11 +39,12 @@ export default function AuthPage() {
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
-    setReturnTo(safeReturnTo(query.get("returnTo")));
+    const next = safeReturnTo(query.get("returnTo"));
+    setReturnTo(next);
     if (!supabase) return;
     let alive = true;
     supabase.auth.getSession().then(({ data }) => {
-      if (alive && data.session) router.replace(safeReturnTo(query.get("returnTo")));
+      if (alive && data.session) router.replace(next);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (alive && session && (event === "SIGNED_IN" || event === "PASSWORD_RECOVERY")) {
@@ -144,7 +145,7 @@ export default function AuthPage() {
           {mode === "login" && method === "password" && <button type="button" className="auth-forgot-v2" onClick={() => router.push(`/auth/reset?returnTo=${encodeURIComponent(returnTo)}`)}>忘记密码？</button>}
           {error && <div className="auth-message-v2 auth-error-v2" role="alert">{error}</div>}
           {success && <div className="auth-message-v2 auth-success-v2" role="status"><CheckCircle2 size={14}/>{success}</div>}
-          <button className="auth-submit-v2" type="submit" disabled={loading}>{loading ? "正在处理…" : method === "otp" && mode === "login" ? <>验证并登录 <ArrowRight size={17}/></> : mode === "register" ? <>创建账号 <ArrowRight size={17}/></> : <>登录星流 <ArrowRight size={17}/></>}</button>
+          <button className="auth-submit-v2" type="submit" disabled={loading}>{loading ? "处理中…" : <>{mode === "login" ? (method === "otp" ? "验证并登录" : "登录星流") : "创建账号"}<ArrowRight size={17}/></>}</button>
         </form>
         <div className="auth-trust-v2"><ShieldCheck size={13}/>账号数据由 Supabase 安全保存</div>
         <p className="auth-tip-v2">登录即表示你同意星流的服务规则。我们不会公开你的邮箱地址。</p>
