@@ -4,6 +4,7 @@ type VideoMeta = {
   title: string | null;
   music: string | null;
   user_id: string;
+  cover_url: string | null;
 };
 
 type ProfileMeta = {
@@ -18,7 +19,7 @@ async function getVideo(id: string): Promise<{ video: VideoMeta | null; profile:
 
   try {
     const videoUrl = new URL(`${base}/rest/v1/videos`);
-    videoUrl.searchParams.set("select", "title,music,user_id");
+    videoUrl.searchParams.set("select", "title,music,user_id,cover_url");
     videoUrl.searchParams.set("id", `eq.${id}`);
     videoUrl.searchParams.set("status", "eq.published");
     videoUrl.searchParams.set("limit", "1");
@@ -71,11 +72,15 @@ export async function generateMetadata({
       url: `/video/${id}`,
       siteName: "星流",
       locale: "zh_CN",
+      ...(video?.cover_url
+        ? { images: [{ url: video.cover_url, width: 720, height: 1280, alt: title }] }
+        : {}),
     },
     twitter: {
-      card: "summary",
+      card: video?.cover_url ? "summary_large_image" : "summary",
       title,
       description,
+      ...(video?.cover_url ? { images: [video.cover_url] } : {}),
     },
   };
 }
