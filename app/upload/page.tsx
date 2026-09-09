@@ -7,6 +7,68 @@ import { supabase } from "../../lib/supabase";
 
 const MAX_SIZE = 100 * 1024 * 1024;
 
+async function createVideoCover(file: File, sourceUrl: string): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    video.src = sourceUrl;
+
+    const cleanup = () => {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    };
+
+    const finish = () => {
+      try {
+        const width = video.videoWidth || 720;
+        const height = video.videoHeight || 1280;
+        const targetW = 720;
+        const targetH = 1280;
+        const scale = Math.max(targetW / width, targetH / height);
+        const drawW = width * scale;
+        const drawH = height * scale;
+        const canvas = document.createElement("canvas");
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          cleanup();
+          resolve(null);
+          return;
+        }
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, targetW, targetH);
+        ctx.drawImage(video, (targetW - drawW) / 2, (targetH - drawH) / 2, drawW, drawH);
+        canvas.toBlob((blob) => {
+          cleanup();
+          resolve(blob);
+        }, "image/jpeg", 0.84);
+      } catch {
+        cleanup();
+        resolve(null);
+      }
+    };
+
+    video.onerror = () => {
+      cleanup();
+      resolve(null);
+    };
+    video.onloadedmetadata = () => {
+      const duration = Number.isFinite(video.duration) ? video.duration : 0;
+      video.currentTime = duration > 0.6 ? Math.min(0.6, duration * 0.15) : 0;
+    };
+    video.onseeked = finish;
+    video.onloadeddata = () => {
+      if (video.readyState >= 2 && video.currentTime === 0) finish();
+    };
+
+    void file;
+  });
+}
+
 export default function UploadPage() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -63,8 +125,9 @@ export default function UploadPage() {
     setError("");
     setProgress(8);
 
+    const id = crypto.randomUUID();
     const ext = file.name.split(".").pop()?.toLowerCase() || "mp4";
-    const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+    const path = `${userId}/${id}.${ext}`;
 
     const { error: uploadError } = await supabase.storage.from("videos").upload(path, file, {
       contentType: file.type,
@@ -78,20 +141,41 @@ export default function UploadPage() {
       return;
     }
 
-    setProgress(72);
+    setProgress(70);
     const { data: publicData } = supabase.storage.from("videos").getPublicUrl(path);
     const videoUrl = publicData.publicUrl;
 
+    let coverUrl: string | null = null;
+    try {
+      const cover = await createVideoCover(file, preview);
+      if (cover) {
+        const coverPath = `${userId}/covers/${id}.jpg`;
+        const { error: coverError } = await supabase.storage.from("videos").upload(coverPath, cover, {
+          contentType: "image/jpeg",
+          cacheControl: "86400",
+          upsert: false,
+        });
+        if (!coverError) {
+          coverUrl = supabase.storage.from("videos").getPublicUrl(coverPath).data.publicUrl;
+        }
+      }
+    } catch {
+      coverUrl = null;
+    }
+
+    setProgress(86);
     const { error: insertError } = await supabase.from("videos").insert({
       user_id: userId,
       url: videoUrl,
       title: title.trim(),
       music: music.trim() || "原创音乐 · 星流",
       status: "published",
+      ...(coverUrl ? { cover_url: coverUrl } : {}),
     });
 
     if (insertError) {
       await supabase.storage.from("videos").remove([path]);
+      if (coverUrl) await supabase.storage.from("videos").remove([`${userId}/covers/${id}.jpg`]);
       setPublishing(false);
       setError(`发布失败：${insertError.message}`);
       return;
