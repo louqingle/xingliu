@@ -1,387 +1,88 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Bookmark, Camera, Check, Grid3X3, Heart, Image as ImageIcon, LogOut, Pencil, Play, Settings, ShieldCheck, Upload, UserRound, Video as VideoIcon, X } from "lucide-react";
+import { ArrowLeft, Bookmark, Camera, Check, Grid3X3, Heart, Image as ImageIcon, LogOut, Menu, MessageCircle, Pencil, Play, Plus, Search, Settings, ShieldCheck, ShoppingBag, Upload, UserPlus, Users, Video as VideoIcon, WalletCards, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
-type Profile = {
-  username: string;
-  display_name: string;
-  avatar_url: string | null;
-  bio: string | null;
-};
+type Profile = { username:string; display_name:string; avatar_url:string|null; bio:string|null };
+type Video = { id:string; url:string; title:string; music:string|null; cover_url:string|null; like_count:number; comment_count:number; created_at:string; status?:string };
+type Tab = "works" | "daily" | "recommend" | "saved" | "liked";
 
-type Video = {
-  id: string;
-  url: string;
-  title: string;
-  music: string | null;
-  cover_url: string | null;
-  like_count: number;
-  comment_count: number;
-  created_at: string;
-};
-
-function VideoThumb({ video }: { video: Video }) {
-  const [thumb, setThumb] = useState(video.cover_url || "");
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-
-  useEffect(() => {
-    setThumb(video.cover_url || "");
-    if (video.cover_url || !video.url) return;
-    const el = videoRef.current;
-    if (!el) return;
-
-    let done = false;
-    const capture = () => {
-      if (done || !el.videoWidth || !el.videoHeight) return;
-      try {
-        const targetW = 720;
-        const targetH = 1280;
-        const scale = Math.max(targetW / el.videoWidth, targetH / el.videoHeight);
-        const drawW = el.videoWidth * scale;
-        const drawH = el.videoHeight * scale;
-        const canvas = document.createElement("canvas");
-        canvas.width = targetW;
-        canvas.height = targetH;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        ctx.fillStyle = "#080808";
-        ctx.fillRect(0, 0, targetW, targetH);
-        ctx.drawImage(el, (targetW - drawW) / 2, (targetH - drawH) / 2, drawW, drawH);
-        const data = canvas.toDataURL("image/jpeg", 0.8);
-        if (data.length > 1000) {
-          done = true;
-          setThumb(data);
-          el.pause();
-        }
-      } catch {
-        // Cross-origin media may block canvas extraction. The video remains the fallback.
-      }
-    };
-
-    const onLoaded = () => {
-      const target = Number.isFinite(el.duration) && el.duration > 0.5 ? Math.min(0.5, el.duration * 0.12) : 0;
-      try { el.currentTime = target; } catch { capture(); }
-    };
-
-    el.addEventListener("loadedmetadata", onLoaded);
-    el.addEventListener("seeked", capture);
-    el.addEventListener("loadeddata", capture);
-    el.load();
-    return () => {
-      el.removeEventListener("loadedmetadata", onLoaded);
-      el.removeEventListener("seeked", capture);
-      el.removeEventListener("loadeddata", capture);
-    };
-  }, [video.cover_url, video.url]);
-
-  if (thumb) return <img className="work-thumb" src={thumb} alt="作品封面" />;
-  return <video ref={videoRef} className="work-thumb work-thumb-video" src={video.url} crossOrigin="anonymous" muted playsInline preload="metadata" />;
+function VideoThumb({video}:{video:Video}) {
+  const [thumb,setThumb]=useState(video.cover_url||""); const videoRef=useRef<HTMLVideoElement|null>(null);
+  useEffect(()=>{setThumb(video.cover_url||""); if(video.cover_url||!video.url)return; const el=videoRef.current;if(!el)return;let done=false;
+    const capture=()=>{if(done||!el.videoWidth||!el.videoHeight)return;try{const w=720,h=1280,s=Math.max(w/el.videoWidth,h/el.videoHeight),dw=el.videoWidth*s,dh=el.videoHeight*s,c=document.createElement("canvas");c.width=w;c.height=h;const ctx=c.getContext("2d");if(!ctx)return;ctx.fillStyle="#080808";ctx.fillRect(0,0,w,h);ctx.drawImage(el,(w-dw)/2,(h-dh)/2,dw,dh);const data=c.toDataURL("image/jpeg",.8);if(data.length>1000){done=true;setThumb(data);el.pause()}}catch{}};
+    const loaded=()=>{const t=Number.isFinite(el.duration)&&el.duration>.5?Math.min(.5,el.duration*.12):0;try{el.currentTime=t}catch{capture()}};
+    el.addEventListener("loadedmetadata",loaded);el.addEventListener("seeked",capture);el.addEventListener("loadeddata",capture);el.load();return()=>{el.removeEventListener("loadedmetadata",loaded);el.removeEventListener("seeked",capture);el.removeEventListener("loadeddata",capture)}} ,[video.cover_url,video.url]);
+  if(thumb)return <img className="work-thumb" src={thumb} alt="作品封面"/>;
+  return <video ref={videoRef} className="work-thumb work-thumb-video" src={video.url} crossOrigin="anonymous" muted playsInline preload="metadata"/>;
 }
 
-export default function ProfilePage() {
-  const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const coverFileRef = useRef<HTMLInputElement>(null);
-  const coverVideoRef = useRef<HTMLVideoElement | null>(null);
+export default function ProfilePage(){
+  const router=useRouter(); const fileRef=useRef<HTMLInputElement>(null); const coverFileRef=useRef<HTMLInputElement>(null); const coverVideoRef=useRef<HTMLVideoElement|null>(null);
+  const [userId,setUserId]=useState<string|null>(null); const [profile,setProfile]=useState<Profile|null>(null); const [videos,setVideos]=useState<Video[]>([]); const [likedVideos,setLikedVideos]=useState<Video[]>([]); const [savedVideos,setSavedVideos]=useState<Video[]>([]);
+  const [followers,setFollowers]=useState(0); const [following,setFollowing]=useState(0); const [likes,setLikes]=useState(0); const [tab,setTab]=useState<Tab>("works"); const [loading,setLoading]=useState(true); const [loggingOut,setLoggingOut]=useState(false);
+  const [editing,setEditing]=useState(false); const [displayName,setDisplayName]=useState(""); const [bio,setBio]=useState(""); const [saving,setSaving]=useState(false); const [uploadingAvatar,setUploadingAvatar]=useState(false); const [saveError,setSaveError]=useState(""); const [toast,setToast]=useState("");
+  const [coverEditing,setCoverEditing]=useState<Video|null>(null); const [coverTime,setCoverTime]=useState(0); const [coverDuration,setCoverDuration]=useState(0); const [coverBusy,setCoverBusy]=useState(false); const [coverPreview,setCoverPreview]=useState(""); const [coverError,setCoverError]=useState("");
 
-  const [userId, setUserId] = useState<string | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [likedVideos, setLikedVideos] = useState<Video[]>([]);
-  const [followers, setFollowers] = useState(0);
-  const [following, setFollowing] = useState(0);
-  const [likes, setLikes] = useState(0);
-  const [tab, setTab] = useState<"works" | "liked">("works");
-  const [loading, setLoading] = useState(true);
-  const [loggingOut, setLoggingOut] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [displayName, setDisplayName] = useState("");
-  const [bio, setBio] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [saveError, setSaveError] = useState("");
-  const [toast, setToast] = useState("");
-
-  const [coverEditing, setCoverEditing] = useState<Video | null>(null);
-  const [coverTime, setCoverTime] = useState(0);
-  const [coverDuration, setCoverDuration] = useState(0);
-  const [coverBusy, setCoverBusy] = useState(false);
-  const [coverPreview, setCoverPreview] = useState("");
-  const [coverError, setCoverError] = useState("");
-
-  async function loadProfile(id: string) {
-    if (!supabase) return;
-    const [{ data: p }, { data: works }, { count: followerCount }, { count: followingCount }, { data: liked }] = await Promise.all([
-      supabase.from("profiles").select("username,nickname,display_name,avatar_url,bio").eq("id", id).maybeSingle(),
-      supabase.from("videos").select("id,url,title,music,cover_url,like_count,comment_count,created_at").eq("user_id", id).order("created_at", { ascending: false }),
-      supabase.from("follows").select("follower_id", { count: "exact", head: true }).eq("following_id", id),
-      supabase.from("follows").select("following_id", { count: "exact", head: true }).eq("follower_id", id),
-      supabase.from("likes").select("video_id").eq("user_id", id),
+  async function loadProfile(id:string){if(!supabase)return;
+    const [{data:p},{data:works},{count:followerCount},{count:followingCount},{data:liked},{data:savedRows}]=await Promise.all([
+      supabase.from("profiles").select("username,nickname,display_name,avatar_url,bio").eq("id",id).maybeSingle(),
+      supabase.from("videos").select("id,url,title,music,cover_url,like_count,comment_count,created_at,status").eq("user_id",id).order("created_at",{ascending:false}),
+      supabase.from("follows").select("follower_id",{count:"exact",head:true}).eq("following_id",id),
+      supabase.from("follows").select("following_id",{count:"exact",head:true}).eq("follower_id",id),
+      supabase.from("likes").select("video_id").eq("user_id",id),
+      supabase.from("saved_videos").select("video_id,created_at").eq("user_id",id).order("created_at",{ascending:false})
     ]);
-
-    const normalized = p ? { ...p, display_name: (p as any).display_name || (p as any).nickname || "星流用户" } : null;
-    setProfile(normalized || { username: "xingliu", display_name: "星流用户", avatar_url: null, bio: "记录生活，分享美好。" });
-    setVideos((works || []) as Video[]);
-    setFollowers(followerCount || 0);
-    setFollowing(followingCount || 0);
-    setLikes(((works || []) as Video[]).reduce((sum, v) => sum + (v.like_count || 0), 0));
-
-    const ids = (liked || []).map((x: any) => x.video_id);
-    if (ids.length) {
-      const { data: lv } = await supabase.from("videos").select("id,url,title,music,cover_url,like_count,comment_count,created_at").in("id", ids).order("created_at", { ascending: false });
-      setLikedVideos((lv || []) as Video[]);
-    } else {
-      setLikedVideos([]);
-    }
+    const normalized=p?{...p,display_name:(p as any).display_name||(p as any).nickname||"星流用户"}:null;
+    setProfile(normalized||{username:"xingliu",display_name:"星流用户",avatar_url:null,bio:"记录生活，分享美好。"});
+    const all=(works||[]) as Video[]; setVideos(all); setFollowers(followerCount||0); setFollowing(followingCount||0); setLikes(all.reduce((s,v)=>s+(v.like_count||0),0));
+    const likedIds=(liked||[]).map((x:any)=>x.video_id); if(likedIds.length){const {data:lv}=await supabase.from("videos").select("id,url,title,music,cover_url,like_count,comment_count,created_at,status").in("id",likedIds).order("created_at",{ascending:false});setLikedVideos((lv||[]) as Video[])}else setLikedVideos([]);
+    const savedIds=(savedRows||[]).map((x:any)=>x.video_id); if(savedIds.length){const {data:sv}=await supabase.from("videos").select("id,url,title,music,cover_url,like_count,comment_count,created_at,status").in("id",savedIds);const order=new Map(savedIds.map((id:string,i:number)=>[id,i]));setSavedVideos(((sv||[]) as Video[]).sort((a,b)=>(order.get(a.id)??999999)-(order.get(b.id)??999999)))}else setSavedVideos([]);
   }
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      if (!supabase) { router.replace("/auth"); return; }
-      const { data: { session } } = await supabase.auth.getSession();
-      const id = session?.user.id;
-      if (!id) { router.replace("/auth"); return; }
-      setUserId(id);
-      await loadProfile(id);
-      if (alive) setLoading(false);
-    })();
-    return () => { alive = false; };
-  }, [router]);
+  useEffect(()=>{let alive=true;(async()=>{if(!supabase){router.replace("/auth");return}const {data:{session}}=await supabase.auth.getSession();const id=session?.user.id;if(!id){router.replace("/auth");return}setUserId(id);await loadProfile(id);if(alive)setLoading(false)})();return()=>{alive=false}},[router]);
+  function showToast(message:string){setToast(message);window.setTimeout(()=>setToast(""),1800)}
+  function openEdit(){setDisplayName(profile?.display_name||"");setBio(profile?.bio||"");setSaveError("");setEditing(true)}
 
-  function showToast(message: string) {
-    setToast(message);
-    window.setTimeout(() => setToast(""), 1800);
-  }
+  async function uploadAvatar(file:File){if(!supabase||!userId)return;if(!file.type.startsWith("image/")){showToast("请选择图片文件");return}if(file.size>5*1024*1024){showToast("头像不能超过 5MB");return}setUploadingAvatar(true);const ext=(file.name.split(".").pop()||"jpg").toLowerCase().replace(/[^a-z0-9]/g,"")||"jpg";const path=`${userId}/${crypto.randomUUID()}.${ext}`;const {error}=await supabase.storage.from("avatars").upload(path,file,{contentType:file.type,cacheControl:"3600",upsert:false});if(error){showToast(`头像上传失败：${error.message}`);setUploadingAvatar(false);return}const {data:{publicUrl}}=supabase.storage.from("avatars").getPublicUrl(path);const {error:updateError}=await supabase.from("profiles").update({avatar_url:publicUrl}).eq("id",userId);if(updateError){await supabase.storage.from("avatars").remove([path]);showToast(`头像保存失败：${updateError.message}`);setUploadingAvatar(false);return}setProfile(p=>p?{...p,avatar_url:publicUrl}:p);showToast("头像已更新");setUploadingAvatar(false)}
 
-  function openEdit() {
-    setDisplayName(profile?.display_name || "");
-    setBio(profile?.bio || "");
-    setSaveError("");
-    setEditing(true);
-  }
+  async function saveProfile(){if(!supabase||!userId)return;const name=displayName.trim().slice(0,30),nextBio=bio.trim().slice(0,120);if(!name){setSaveError("昵称不能为空");return}setSaving(true);setSaveError("");const {error}=await supabase.from("profiles").update({nickname:name,display_name:name,bio:nextBio||null}).eq("id",userId);if(error){setSaveError(`保存失败：${error.message}`);setSaving(false);return}setProfile(p=>p?{...p,display_name:name,bio:nextBio||null}:p);setEditing(false);setSaving(false);showToast("资料已保存")}
 
-  async function uploadAvatar(file: File) {
-    if (!supabase || !userId) return;
-    if (!file.type.startsWith("image/")) { showToast("请选择图片文件"); return; }
-    if (file.size > 5 * 1024 * 1024) { showToast("头像不能超过 5MB"); return; }
-    setUploadingAvatar(true);
-    const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-    const path = `${userId}/${crypto.randomUUID()}.${ext}`;
-    const { error } = await supabase.storage.from("avatars").upload(path, file, { contentType: file.type, cacheControl: "3600", upsert: false });
-    if (error) { showToast(`头像上传失败：${error.message}`); setUploadingAvatar(false); return; }
-    const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
-    const { error: updateError } = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", userId);
-    if (updateError) {
-      await supabase.storage.from("avatars").remove([path]);
-      showToast(`头像保存失败：${updateError.message}`);
-      setUploadingAvatar(false);
-      return;
-    }
-    setProfile(p => p ? { ...p, avatar_url: publicUrl } : p);
-    showToast("头像已更新");
-    setUploadingAvatar(false);
-  }
+  function openCoverEditor(video:Video){setCoverEditing(video);setCoverTime(0);setCoverDuration(0);setCoverPreview(video.cover_url||"");setCoverError("")}
+  function closeCoverEditor(){if(coverBusy)return;setCoverEditing(null);setCoverPreview("");setCoverError("")}
+  function captureCover(){const video=coverVideoRef.current;if(!video||!video.videoWidth||!video.videoHeight){setCoverError("视频还没加载完成，请稍等一下");return null}try{const w=720,h=1280,s=Math.max(w/video.videoWidth,h/video.videoHeight),dw=video.videoWidth*s,dh=video.videoHeight*s,c=document.createElement("canvas");c.width=w;c.height=h;const ctx=c.getContext("2d");if(!ctx)return null;ctx.fillStyle="#080808";ctx.fillRect(0,0,w,h);ctx.drawImage(video,(w-dw)/2,(h-dh)/2,dw,dh);return c.toDataURL("image/jpeg",.86)}catch{setCoverError("这个视频暂时不能截取画面，可以直接上传图片");return null}}
+  async function uploadCoverBlob(blob:Blob){if(!supabase||!userId||!coverEditing)return;setCoverBusy(true);setCoverError("");const path=`${userId}/covers/${coverEditing.id}-${crypto.randomUUID()}.jpg`;const {error:uploadError}=await supabase.storage.from("videos").upload(path,blob,{contentType:"image/jpeg",cacheControl:"31536000",upsert:false});if(uploadError){setCoverError(`封面上传失败：${uploadError.message}`);setCoverBusy(false);return}const {data:{publicUrl}}=supabase.storage.from("videos").getPublicUrl(path);const {error:updateError}=await supabase.from("videos").update({cover_url:publicUrl}).eq("id",coverEditing.id).eq("user_id",userId);if(updateError){await supabase.storage.from("videos").remove([path]);setCoverError(`封面保存失败：${updateError.message}`);setCoverBusy(false);return}const next={...coverEditing,cover_url:publicUrl};setCoverEditing(next);setCoverPreview(publicUrl);setVideos(list=>list.map(v=>v.id===next.id?{...v,cover_url:publicUrl}:v));setLikedVideos(list=>list.map(v=>v.id===next.id?{...v,cover_url:publicUrl}:v));setSavedVideos(list=>list.map(v=>v.id===next.id?{...v,cover_url:publicUrl}:v));showToast("封面已保存");setCoverBusy(false)}
+  async function saveFrameCover(){const dataUrl=captureCover();if(!dataUrl)return;await uploadCoverBlob(await(await fetch(dataUrl)).blob())}
+  async function uploadCustomCover(file:File){if(!file.type.startsWith("image/")){setCoverError("请选择 JPG、PNG 或 WebP 图片");return}if(file.size>8*1024*1024){setCoverError("封面图片不能超过 8MB");return}const preview=URL.createObjectURL(file);setCoverPreview(preview);await uploadCoverBlob(file);URL.revokeObjectURL(preview)}
+  async function logout(){if(!supabase)return;setLoggingOut(true);const {error}=await supabase.auth.signOut({scope:"global"});if(error){showToast(`退出失败：${error.message}`);setLoggingOut(false);return}localStorage.removeItem("xingliu-current-user");router.replace("/auth")}
 
-  async function saveProfile() {
-    if (!supabase || !userId) return;
-    const name = displayName.trim().slice(0, 30);
-    const nextBio = bio.trim().slice(0, 120);
-    if (!name) { setSaveError("昵称不能为空"); return; }
-    setSaving(true);
-    setSaveError("");
-    const { error } = await supabase.from("profiles").update({ nickname: name, display_name: name, bio: nextBio || null }).eq("id", userId);
-    if (error) { setSaveError(`保存失败：${error.message}`); setSaving(false); return; }
-    setProfile(p => p ? { ...p, display_name: name, bio: nextBio || null } : p);
-    setEditing(false);
-    setSaving(false);
-    showToast("资料已保存");
-  }
+  const published=useMemo(()=>videos.filter(v=>v.status!=="private"),[videos]);
+  const list=useMemo(()=>tab==="liked"?likedVideos:tab==="saved"?savedVideos:published,[tab,likedVideos,savedVideos,published]);
+  const coverUrl=published.find(v=>v.cover_url)?.cover_url||profile?.avatar_url||""; const privateCount=videos.filter(v=>v.status==="private").length; const initial=(profile?.display_name||profile?.username||"星").slice(0,1).toUpperCase();
+  const tabs:[Tab,string,typeof Grid3X3][]=[["works","作品",Grid3X3],["daily","日常",Camera],["recommend","推荐",Heart],["saved","收藏",Bookmark],["liked","点赞",Heart]];
 
-  function openCoverEditor(video: Video) {
-    setCoverEditing(video);
-    setCoverTime(0);
-    setCoverDuration(0);
-    setCoverPreview(video.cover_url || "");
-    setCoverError("");
-  }
-
-  function closeCoverEditor() {
-    if (coverBusy) return;
-    setCoverEditing(null);
-    setCoverPreview("");
-    setCoverError("");
-  }
-
-  function captureCover() {
-    const video = coverVideoRef.current;
-    if (!video || !video.videoWidth || !video.videoHeight) {
-      setCoverError("视频还没加载完成，请稍等一下");
-      return null;
-    }
-    try {
-      const targetW = 720;
-      const targetH = 1280;
-      const scale = Math.max(targetW / video.videoWidth, targetH / video.videoHeight);
-      const drawW = video.videoWidth * scale;
-      const drawH = video.videoHeight * scale;
-      const canvas = document.createElement("canvas");
-      canvas.width = targetW;
-      canvas.height = targetH;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return null;
-      ctx.fillStyle = "#080808";
-      ctx.fillRect(0, 0, targetW, targetH);
-      ctx.drawImage(video, (targetW - drawW) / 2, (targetH - drawH) / 2, drawW, drawH);
-      return canvas.toDataURL("image/jpeg", 0.86);
-    } catch {
-      setCoverError("这个视频暂时不能在浏览器里截取画面，可以改用“上传图片”设置封面");
-      return null;
-    }
-  }
-
-  async function uploadCoverBlob(blob: Blob) {
-    if (!supabase || !userId || !coverEditing) return;
-    setCoverBusy(true);
-    setCoverError("");
-    const path = `${userId}/covers/${coverEditing.id}-${crypto.randomUUID()}.jpg`;
-    const { error: uploadError } = await supabase.storage.from("videos").upload(path, blob, { contentType: "image/jpeg", cacheControl: "31536000", upsert: false });
-    if (uploadError) {
-      setCoverError(`封面上传失败：${uploadError.message}`);
-      setCoverBusy(false);
-      return;
-    }
-    const { data: { publicUrl } } = supabase.storage.from("videos").getPublicUrl(path);
-    const { error: updateError } = await supabase.from("videos").update({ cover_url: publicUrl }).eq("id", coverEditing.id).eq("user_id", userId);
-    if (updateError) {
-      await supabase.storage.from("videos").remove([path]);
-      setCoverError(`封面保存失败：${updateError.message}`);
-      setCoverBusy(false);
-      return;
-    }
-    const next = { ...coverEditing, cover_url: publicUrl };
-    setCoverEditing(next);
-    setCoverPreview(publicUrl);
-    setVideos(list => list.map(v => v.id === next.id ? { ...v, cover_url: publicUrl } : v));
-    setLikedVideos(list => list.map(v => v.id === next.id ? { ...v, cover_url: publicUrl } : v));
-    showToast("封面已保存");
-    setCoverBusy(false);
-  }
-
-  async function saveFrameCover() {
-    const dataUrl = captureCover();
-    if (!dataUrl) return;
-    const blob = await (await fetch(dataUrl)).blob();
-    await uploadCoverBlob(blob);
-  }
-
-  async function uploadCustomCover(file: File) {
-    if (!file.type.startsWith("image/")) { setCoverError("请选择 JPG、PNG 或 WebP 图片"); return; }
-    if (file.size > 8 * 1024 * 1024) { setCoverError("封面图片不能超过 8MB"); return; }
-    const preview = URL.createObjectURL(file);
-    setCoverPreview(preview);
-    await uploadCoverBlob(file);
-    URL.revokeObjectURL(preview);
-  }
-
-  async function logout() {
-    if (!supabase) return;
-    setLoggingOut(true);
-    const { error } = await supabase.auth.signOut({ scope: "global" });
-    if (error) { showToast(`退出失败：${error.message}`); setLoggingOut(false); return; }
-    localStorage.removeItem("xingliu-current-user");
-    router.replace("/auth");
-  }
-
-  const list = useMemo(() => tab === "works" ? videos : likedVideos, [tab, videos, likedVideos]);
-  const initial = (profile?.display_name || profile?.username || "星").slice(0, 1).toUpperCase();
-
-  if (loading) return <main className="profile-loading">加载中…</main>;
-  if (!profile) return null;
-
-  return (
-    <main className="profile-page">
-      <style jsx global>{`.profile-avatar{position:relative!important;border:3px solid #fff}.profile-avatar .avatarCamera{position:absolute;right:0;bottom:0;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#fff;color:#111;border:2px solid #070707;box-shadow:0 2px 10px #0008}.profile-avatar:disabled{opacity:.65}.stats>button{width:30%;text-align:center;color:#fff}.stats>button strong,.stats>button span{display:block}.stats>button span{font-size:12px;color:#888;margin-top:3px}.stats>button{border-right:1px solid #ffffff0b}.stats>button:last-child{border:0}`}</style>
-
-      <header className="profile-header">
-        <button className="back-button" onClick={() => router.push("/")}><ArrowLeft size={21}/></button>
-        <strong>个人主页</strong>
-        <button className="more-button" onClick={() => router.push("/settings")}><Settings size={20}/></button>
-      </header>
-
-      <section className="profile-top">
-        <button className="profile-avatar" onClick={() => fileRef.current?.click()} disabled={uploadingAvatar}>
-          {profile.avatar_url ? <img src={profile.avatar_url} alt="头像"/> : initial}
-          <span className="avatarCamera"><Camera size={16}/></span>
-        </button>
-        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden onChange={e => { const f = e.target.files?.[0]; if (f) uploadAvatar(f); e.currentTarget.value = ""; }}/>
-        <h1>{profile.display_name || profile.username}</h1>
-        <p>@{profile.username}</p>
-        <p className="profile-bio">{profile.bio || "记录生活，分享美好。"}</p>
-        <div className="profile-actions">
-          <button className="edit-button" onClick={openEdit}><Pencil size={15}/> 编辑资料</button>
-          <button className="edit-button" onClick={() => router.push("/saved")}><Bookmark size={15}/> 我的收藏</button>
-          <button className="edit-button" onClick={() => router.push("/settings")}><ShieldCheck size={15}/> 账号安全</button>
-        </div>
-      </section>
-
-      <section className="stats">
-        <button onClick={() => router.push("/following")}><strong>{following}</strong><span>关注</span></button>
-        <button onClick={() => router.push("/followers")}><strong>{followers}</strong><span>粉丝</span></button>
-        <button><strong>{fmt(likes)}</strong><span>获赞</span></button>
-      </section>
-
-      <section className="profile-tabs">
-        <button className={tab === "works" ? "active" : ""} onClick={() => setTab("works")}><Grid3X3 size={18}/>作品 {videos.length}</button>
-        <button className={tab === "liked" ? "active" : ""} onClick={() => setTab("liked")}><Heart size={18}/>点赞 {likedVideos.length}</button>
-      </section>
-
-      {list.length ? (
-        <section className="works-grid">
-          {list.map(v => (
-            <div className="work-card" key={v.id}>
-              <button className="work-open" onClick={() => router.push(`/video/${v.id}`)} aria-label={v.title || "打开作品"}>
-                <VideoThumb video={v}/>
-                <span className="workShade" />
-                <span className="playBadge"><Play size={14} fill="white"/></span>
-                <span className="workStats"><Heart size={13} fill="white"/> {fmt(v.like_count || 0)}</span>
-              </button>
-              {tab === "works" && <button className="coverEditButton" onClick={() => openCoverEditor(v)} aria-label="设置封面"><Pencil size={14}/><span>封面</span></button>}
-            </div>
-          ))}
-        </section>
-      ) : (
-        <section className="empty-content">
-          <div className="empty-icon"><VideoIcon size={28}/></div>
-          <h2>{tab === "works" ? "还没有作品" : "还没有点赞作品"}</h2>
-          <p>{tab === "works" ? "发布你的第一个视频吧" : "去首页发现喜欢的作品"}</p>
-          <button className="publish-button" onClick={() => router.push(tab === "works" ? "/upload" : "/")}>{tab === "works" ? "发布视频" : "去发现"}</button>
-        </section>
-      )}
-
-      <button className="logout-button" disabled={loggingOut} onClick={logout}><LogOut size={18}/>{loggingOut ? "正在退出所有设备…" : "退出所有设备"}</button>
-
-      <nav className="profile-bottom">
-        <button onClick={() => router.push("/")}><UserRound size={20}/><span>首页</span></button>
-        <button className="plus" onClick={() => router.push("/upload")}>＋</button>
-        <button className="selected"><UserRound size={20}/><span>我</span></button>
-      </nav>
-
-      {editing && <div className="profile-edit-overlay" onClick={() => !saving && setEditing(false)}><section className="profile-edit-sheet" onClick={e => e.stopPropagation()}><header><strong>编辑资料</strong><button onClick={() => !saving && setEditing(false)}><X size={20}/></button></header><label>昵称<input value={displayName} maxLength={30} onChange={e => setDisplayName(e.target.value)}/></label><label>个人简介<textarea value={bio} maxLength={120} onChange={e => setBio(e.target.value)}/></label><div className="editCount">{bio.length}/120</div>{saveError && <div className="profileSaveError">{saveError}</div>}<button className="saveProfileBtn" disabled={saving} onClick={saveProfile}>{saving ? "保存中…" : <><Check size={18}/> 保存资料</>}</button></section></div>}
-
-      {coverEditing && <div className="profile-edit-overlay cover-overlay" onClick={closeCoverEditor}><section className="profile-edit-sheet cover-sheet" onClick={e => e.stopPropagation()}><header><strong>设置作品封面</strong><button onClick={closeCoverEditor}><X size={20}/></button></header><div className="cover-preview"><video ref={coverVideoRef} src={coverEditing.url} crossOrigin="anonymous" muted playsInline preload="metadata" onLoadedMetadata={e => { setCoverDuration(e.currentTarget.duration || 0); e.currentTarget.currentTime = Math.min(0.5, Math.max(0, (e.currentTarget.duration || 0) * 0.12)); }} onTimeUpdate={e => setCoverTime(e.currentTarget.currentTime)}/>{coverPreview && <img src={coverPreview} alt="封面预览"/>}<span className="coverPreviewBadge">{coverPreview ? "当前封面" : "视频画面"}</span></div><label className="cover-range-label">选择画面 <strong>{Math.round(coverTime * 10) / 10}s</strong><input type="range" min="0" max={Math.max(0.1, coverDuration)} step="0.1" value={Math.min(coverTime, Math.max(0.1, coverDuration))} onChange={e => { const t = Number(e.target.value); setCoverTime(t); if (coverVideoRef.current) coverVideoRef.current.currentTime = t; }}/></label>{coverError && <div className="profileSaveError">{coverError}</div>}<div className="cover-actions"><button className="cover-secondary" disabled={coverBusy} onClick={() => coverFileRef.current?.click()}><Upload size={17}/> 上传图片</button><button className="saveProfileBtn cover-save" disabled={coverBusy || !coverDuration} onClick={saveFrameCover}>{coverBusy ? "保存中…" : <><ImageIcon size={17}/> 使用当前画面</>}</button></div><input ref={coverFileRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={e => { const f = e.target.files?.[0]; if (f) uploadCustomCover(f); e.currentTarget.value = ""; }}/><p className="cover-tip">建议使用竖屏 9:16 图片。视频截帧如果被浏览器的跨域限制拦截，可以直接上传一张图片作为封面。</p></section></div>}
-
-      {toast && <div className="toast">{toast}</div>}
-    </main>
-  );
+  if(loading)return <main className="profile-loading">加载中…</main>; if(!profile)return null;
+  return <main className="profile-page">
+    <style jsx global>{`.profile-avatar{position:relative!important;border:3px solid #fff}.profile-avatar .avatarCamera{position:absolute;right:0;bottom:0;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#fff;color:#111;border:2px solid #070707;box-shadow:0 2px 10px #0008}.profile-avatar:disabled{opacity:.65}.stats>button{width:30%;text-align:center;color:#fff}.stats>button strong,.stats>button span{display:block}.stats>button span{font-size:12px;color:#888;margin-top:3px}.stats>button{border-right:1px solid #ffffff0b}.stats>button:last-child{border:0}.profile-hero{background-image:linear-gradient(180deg,#0005 0%,#0002 45%,#070707 100%),var(--profile-cover);background-size:cover;background-position:center;min-height:310px;padding:18px 18px 28px;position:relative}.hero-controls{display:flex;align-items:center;justify-content:space-between;color:#fff}.hero-right{display:flex;gap:9px}.hero-btn{border:0;border-radius:999px;background:#0008;color:#fff;padding:8px 11px;display:flex;align-items:center;gap:5px;font-size:12px}.hero-info{margin-top:95px}.hero-info h1{margin:10px 0 0;font-size:27px}.hero-info p{margin:5px 0;color:#ddd;font-size:13px}.hero-bio{max-width:430px;color:#fff!important}.profile-badges{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.profile-badges span{padding:5px 9px;border-radius:999px;background:#ffffff18;color:#fff;font-size:11px}.ai-avatar-btn{margin-top:12px;border:1px solid #ffffff33;background:#fff;color:#111;border-radius:999px;padding:8px 13px;font-weight:700}.shortcut-row{display:grid;grid-template-columns:repeat(5,1fr);padding:15px 10px;background:#101010;gap:4px}.shortcut-row button{background:none;border:0;color:#ddd;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px}.shortcut-row svg{color:#aaa}.private-row{margin:10px 12px;padding:13px 15px;border-radius:15px;background:#151515;display:flex;align-items:center;justify-content:space-between}.private-row button{border:0;background:none;color:#aaa}.profile-tabs{position:sticky;top:0;z-index:8;display:grid;grid-template-columns:repeat(5,1fr);background:#090909ef;backdrop-filter:blur(12px);overflow:auto}.profile-tabs button{border:0;background:none;color:#777;padding:14px 4px 11px;font-size:12px;display:flex;align-items:center;justify-content:center;gap:4px;border-bottom:2px solid transparent}.profile-tabs button.active{color:#fff;border-bottom-color:#fff}.profile-bottom{display:grid!important;grid-template-columns:repeat(5,1fr)!important}.profile-bottom button{display:flex!important}.profile-bottom .plus{font-size:27px!important}.promo-card{margin:12px;border-radius:16px;padding:15px;background:linear-gradient(135deg,#1d2633,#151515);display:flex;align-items:center;justify-content:space-between;color:#fff}.promo-card button{border:0;border-radius:999px;padding:7px 11px;background:#fff;color:#111;font-weight:700;font-size:11px}`}</style>
+    <section className="profile-hero" style={{"--profile-cover":coverUrl?`url(${coverUrl})`:"linear-gradient(135deg,#182033,#090909)"} as React.CSSProperties}>
+      <div className="hero-controls"><button className="hero-btn" onClick={()=>router.push("/")}><ArrowLeft size={17}/></button><div className="hero-right"><button className="hero-btn" onClick={()=>showToast("新访客功能即将开放")}><UserPlus size={15}/>新访客</button><button className="hero-btn" onClick={()=>showToast("搜索功能即将开放")}><Search size={16}/></button><button className="hero-btn" onClick={()=>router.push("/settings")}><Menu size={17}/></button></div></div>
+      <div className="hero-info"><button className="profile-avatar" onClick={()=>fileRef.current?.click()} disabled={uploadingAvatar}>{profile.avatar_url?<img src={profile.avatar_url} alt="头像"/>:initial}<span className="avatarCamera"><Camera size={16}/></span></button><h1>{profile.display_name||profile.username}</h1><p>星流号 @{profile.username}</p><p className="hero-bio">{profile.bio||"记录生活，分享美好。"}</p><div className="profile-badges"><span>星流创作者</span><span>生活记录</span></div><button className="ai-avatar-btn" onClick={()=>showToast("AI 形象功能正在准备")}>✦ 创建 AI 形象</button></div>
+      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden onChange={e=>{const f=e.target.files?.[0];if(f)uploadAvatar(f);e.currentTarget.value=""}}/>
+    </section>
+    <section className="stats"><button onClick={()=>router.push("/following")}><strong>{following}</strong><span>关注</span></button><button onClick={()=>router.push("/followers")}><strong>{followers}</strong><span>粉丝</span></button><button><strong>{fmt(likes)}</strong><span>获赞</span></button></section>
+    <section className="profile-actions" style={{padding:"0 12px 12px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}><button className="edit-button" onClick={openEdit}><Pencil size={15}/>编辑资料</button><button className="edit-button" onClick={()=>router.push("/saved")}><Bookmark size={15}/>我的收藏</button><button className="edit-button" onClick={()=>router.push("/settings")}><ShieldCheck size={15}/>账号安全</button></section>
+    <section className="shortcut-row"><button onClick={()=>showToast("订单功能即将开放")}><ShoppingBag size={21}/><span>订单</span></button><button onClick={()=>showToast("预约功能即将开放")}><Check size={21}/><span>预约</span></button><button onClick={()=>showToast("浏览记录即将开放")}><Grid3X3 size={21}/><span>记录</span></button><button onClick={()=>showToast("钱包功能即将开放")}><WalletCards size={21}/><span>钱包</span></button><button onClick={()=>router.push("/settings")}><Settings size={21}/><span>更多</span></button></section>
+    <div className="promo-card"><div><strong>星流创作者中心</strong><div style={{fontSize:12,color:"#999",marginTop:4}}>发布作品，积累你的个人影响力</div></div><button onClick={()=>router.push("/creator")}>进入</button></div>
+    <div className="private-row"><div><strong>私密作品</strong><div style={{fontSize:12,color:"#777",marginTop:3}}>{privateCount} 个仅自己可见的作品</div></div><button onClick={()=>setTab("works")}>管理 ›</button></div>
+    <section className="profile-tabs" role="tablist">{tabs.map(([key,label,Icon])=><button key={key} role="tab" aria-selected={tab===key} className={tab===key?"active":""} onClick={()=>setTab(key)}><Icon size={16}/>{label}{key==="works"&&` ${published.length}`}</button>)}</section>
+    {list.length?<section className="works-grid">{list.map(v=><div className="work-card" key={v.id}><button className="work-open" onClick={()=>router.push(`/video/${v.id}`)} aria-label={v.title||"打开作品"}><VideoThumb video={v}/><span className="workShade"/><span className="playBadge"><Play size={14} fill="white"/></span><span className="workStats"><Heart size={13} fill="white"/> {fmt(v.like_count||0)}</span></button>{tab==="works"&&<button className="coverEditButton" onClick={()=>openCoverEditor(v)} aria-label="设置封面"><Pencil size={14}/><span>封面</span></button>}</div>)}</section>:<section className="empty-content"><div className="empty-icon"><VideoIcon size={28}/></div><h2>{tab==="works"?"还没有作品":tab==="saved"?"还没有收藏作品":tab==="liked"?"还没有点赞作品":"这里还没有内容"}</h2><p>{tab==="works"?"发布你的第一个视频吧":"去首页发现更多精彩内容"}</p><button className="publish-button" onClick={()=>router.push(tab==="works"?"/upload":"/")}>{tab==="works"?"发布视频":"去发现"}</button></section>}
+    <button className="logout-button" disabled={loggingOut} onClick={logout}><LogOut size={18}/>{loggingOut?"正在退出所有设备…":"退出所有设备"}</button>
+    <nav className="profile-bottom" aria-label="主导航"><button onClick={()=>router.push("/")}><Grid3X3 size={20}/><span>首页</span></button><button onClick={()=>router.push("/discover")}><Users size={20}/><span>朋友</span></button><button className="plus" onClick={()=>router.push("/upload")} aria-label="发布"><Plus size={28}/></button><button onClick={()=>router.push("/messages")}><MessageCircle size={20}/><span>消息</span></button><button className="selected" onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}><Camera size={20}/><span>我</span></button></nav>
+    {editing&&<div className="profile-edit-overlay" onClick={()=>!saving&&setEditing(false)}><section className="profile-edit-sheet" onClick={e=>e.stopPropagation()}><header><strong>编辑资料</strong><button onClick={()=>!saving&&setEditing(false)}><X size={20}/></button></header><label>昵称<input value={displayName} maxLength={30} onChange={e=>setDisplayName(e.target.value)}/></label><label>个人简介<textarea value={bio} maxLength={120} onChange={e=>setBio(e.target.value)}/></label><div className="editCount">{bio.length}/120</div>{saveError&&<div className="profileSaveError">{saveError}</div>}<button className="saveProfileBtn" disabled={saving} onClick={saveProfile}>{saving?"保存中…":<><Check size={18}/>保存资料</>}</button></section></div>}
+    {coverEditing&&<div className="profile-edit-overlay cover-overlay" onClick={closeCoverEditor}><section className="profile-edit-sheet cover-sheet" onClick={e=>e.stopPropagation()}><header><strong>设置作品封面</strong><button onClick={closeCoverEditor}><X size={20}/></button></header><div className="cover-preview"><video ref={coverVideoRef} src={coverEditing.url} crossOrigin="anonymous" muted playsInline preload="metadata" onLoadedMetadata={e=>{setCoverDuration(e.currentTarget.duration||0);e.currentTarget.currentTime=Math.min(.5,Math.max(0,(e.currentTarget.duration||0)*.12))}} onTimeUpdate={e=>setCoverTime(e.currentTarget.currentTime)}/>{coverPreview&&<img src={coverPreview} alt="封面预览"/>}<span className="coverPreviewBadge">{coverPreview?"当前封面":"视频画面"}</span></div><label className="cover-range-label">选择画面 <strong>{Math.round(coverTime*10)/10}s</strong><input type="range" min="0" max={Math.max(.1,coverDuration)} step=".1" value={Math.min(coverTime,Math.max(.1,coverDuration))} onChange={e=>{const t=Number(e.target.value);setCoverTime(t);if(coverVideoRef.current)coverVideoRef.current.currentTime=t}}/></label>{coverError&&<div className="profileSaveError">{coverError}</div>}<div className="cover-actions"><button className="cover-secondary" disabled={coverBusy} onClick={()=>coverFileRef.current?.click()}><Upload size={17}/>上传图片</button><button className="saveProfileBtn cover-save" disabled={coverBusy||!coverDuration} onClick={saveFrameCover}>{coverBusy?"保存中…":<><ImageIcon size={17}/>使用当前画面</>}</button></div><input ref={coverFileRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={e=>{const f=e.target.files?.[0];if(f)uploadCustomCover(f);e.currentTarget.value=""}}/><p className="cover-tip">建议使用竖屏 9:16 图片。视频截帧如果被浏览器跨域限制拦截，可以直接上传图片。</p></section></div>}
+    {toast&&<div className="toast">{toast}</div>}
+  </main>;
 }
-
-function fmt(n: number) {
-  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
-  if (n >= 10000) return `${(n / 10000).toFixed(1)}万`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return n.toLocaleString("zh-CN");
-}
+function fmt(n:number){if(n>=1000000)return `${(n/1000000).toFixed(1)}M`;if(n>=10000)return `${(n/10000).toFixed(1)}万`;if(n>=1000)return `${(n/1000).toFixed(1)}K`;return n.toLocaleString("zh-CN")}
