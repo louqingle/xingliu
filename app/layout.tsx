@@ -12,6 +12,9 @@ export const metadata: Metadata = {
   description: "星流，发现有趣视频，连接真实创作者。",
   applicationName: "星流",
   keywords: ["星流", "短视频", "视频社区", "创作者", "短视频平台"],
+  alternates: {
+    canonical: "/",
+  },
   robots: {
     index: true,
     follow: true,
