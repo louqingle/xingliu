@@ -79,15 +79,14 @@ function VideoThumb({ video }: { video: Video }) {
     };
   }, [video.cover_url, video.url]);
 
-  if (thumb) {
-    return <img className="work-thumb" src={thumb} alt="作品封面" />;
-  }
+  if (thumb) return <img className="work-thumb" src={thumb} alt="作品封面" />;
 
   return (
     <video
       ref={videoRef}
       className="work-thumb work-thumb-video"
       src={video.url}
+      crossOrigin="anonymous"
       muted
       playsInline
       preload="metadata"
