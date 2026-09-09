@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./feed-enhance.css";
 import "./profile/profile-enhance.css";
@@ -6,6 +6,19 @@ import "./profile/profile-enhance.css";
 export const metadata: Metadata = {
   title: "星流 - 短视频社区",
   description: "星流，发现有趣视频，连接真实创作者。",
+  applicationName: "星流",
+  appleWebApp: {
+    capable: true,
+    title: "星流",
+    statusBarStyle: "black-translucent",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#050505",
 };
 
 export default function RootLayout({
