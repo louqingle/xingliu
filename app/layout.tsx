@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./feed-enhance.css";
 import "./profile/profile-enhance.css";
+import SplashScreen from "./splash-screen";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://xingliu.vercel.app"),
@@ -52,7 +53,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body>
+        <SplashScreen />
+        {children}
+      </body>
     </html>
   );
 }
