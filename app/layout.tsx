@@ -3,6 +3,7 @@ import "./globals.css";
 import "./feed-enhance.css";
 import "./profile/profile-enhance.css";
 import SplashScreen from "./splash-screen";
+import VideoFullscreen from "./video-fullscreen";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://xingliu.vercel.app"),
@@ -55,6 +56,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body>
         <SplashScreen />
+        <VideoFullscreen />
         {children}
       </body>
     </html>
