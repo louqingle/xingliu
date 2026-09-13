@@ -1,0 +1,1 @@
+Xingliu PWA assets are managed through the Next.js app manifest.
