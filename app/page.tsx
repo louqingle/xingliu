@@ -11,6 +11,7 @@ import styles from "./avatar-position.module.css";
 type Video={id:string;src:string;username:string;title:string;music:string;likes:number;comments:number;avatar:string;avatarUrl:string|null;userId:string;createdAt:string;coverUrl:string|null};
 type Comment={id:string;content:string;created_at:string;user_id:string;username:string;avatar_url:string|null};
 const fmt=(n:number)=>n>=1000000?`${(n/1000000).toFixed(1)}M`:n>=10000?`${(n/10000).toFixed(1)}万`:n>=1000?`${(n/1000).toFixed(1)}K`:String(n);
+const HOME_READY_EVENT="xingliu-home-ready";
 
 export default function Home(){
  const router=useRouter();
@@ -21,11 +22,11 @@ export default function Home(){
   if(!supabase)return;
   setLoading(true);setFeedError("");
   const base=await supabase.from("videos").select("id,url,title,music,like_count,comment_count,user_id,created_at,cover_url").eq("status","published").order("created_at",{ascending:false}).limit(100);
-  if(base.error){setFeedError(base.error.message);setVideos([]);setLoading(false);return;}
+  if(base.error){setFeedError(base.error.message);setVideos([]);setLoading(false);window.dispatchEvent(new Event(HOME_READY_EVENT));return;}
   const rows=base.data||[];
   const ids=[...new Set(rows.map((v:any)=>v.user_id))];
   let profiles:any[]=[];
-  if(ids.length){const p=await supabase.from("profiles").select("id,username,nickname,avatar_url").in("id",ids);if(p.error){setFeedError(p.error.message);setVideos([]);setLoading(false);return;}profiles=p.data||[];}
+  if(ids.length){const p=await supabase.from("profiles").select("id,username,nickname,avatar_url").in("id",ids);if(p.error){setFeedError(p.error.message);setVideos([]);setLoading(false);window.dispatchEvent(new Event(HOME_READY_EVENT));return;}profiles=p.data||[];}
   const mapped=rows.map((v:any)=>{const p=profiles.find(x=>x.id===v.user_id);const name=p?.username||p?.nickname||"星流用户";return{id:v.id,src:v.url,title:v.title||"分享一个瞬间",music:v.music||"原创音乐 · 星流",username:name,likes:v.like_count||0,comments:v.comment_count||0,avatar:(name||"星").slice(0,1),avatarUrl:p?.avatar_url||null,userId:v.user_id,createdAt:v.created_at,coverUrl:v.cover_url||null};});
   setVideos(mapped);
   if(user){
@@ -39,6 +40,7 @@ export default function Home(){
    setSaved((s.data||[]).map((x:any)=>x.video_id));
   } else { setLiked([]);setFollowing([]);setSaved([]); }
   setLoading(false);
+  requestAnimationFrame(()=>window.dispatchEvent(new Event(HOME_READY_EVENT)));
  },[]);
 
  useEffect(()=>{let alive=true;(async()=>{if(!supabase)return;const {data:{session}}=await supabase.auth.getSession();if(!alive)return;const id=session?.user.id||null;setUid(id);await loadFeed(id);})();return()=>{alive=false}},[loadFeed]);
