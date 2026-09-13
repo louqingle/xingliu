@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, ChevronDown, Clock3, Flashlight, Loader2, Music2, RefreshCw, Sparkles, SwitchCamera, Upload, Video, X, Zap } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Clock3, Flashlight, Loader2, Music2, Sparkles, SwitchCamera, Upload, Video, X, Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
