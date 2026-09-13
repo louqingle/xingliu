@@ -7,3 +7,5 @@ declare global {
 }
 
 export {};
+
+// Production deployment trigger: Xingliu camera V2 is active on main.
