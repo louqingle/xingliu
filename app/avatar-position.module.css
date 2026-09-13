@@ -1,1 +1,23 @@
 .actionAvatar{position:relative;width:58px;height:58px;display:grid;place-items:center;margin-bottom:1px;text-decoration:none;color:#fff;filter:drop-shadow(0 5px 14px rgba(0,0,0,.35))}.avatar{width:52px;height:52px;font-size:19px;border:2px solid #fff;background:#fff;color:#111;overflow:hidden}.avatar img{width:100%;height:100%;object-fit:cover;display:block}.plus{position:absolute;left:50%;bottom:-5px;transform:translateX(-50%);width:21px;height:21px;border-radius:50%;display:grid;place-items:center;background:#ff2d55;color:#fff;border:2px solid #000;font-size:15px;font-weight:900;line-height:1;box-shadow:0 3px 10px rgba(0,0,0,.4)}
+
+/* 星流短视频播放页：右下角操作栏更接近抖音，头像更小、操作更紧凑 */
+:global(.actions){right:10px;bottom:88px;width:50px;gap:8px}
+:global(.actions .action){width:44px;gap:2px}
+:global(.actions .action b){font-size:9px;line-height:1.1}
+:global(.actions .circle){width:38px;height:38px}
+:global(.actions .circle svg){width:20px;height:20px}
+:global(.actions .disc){width:38px;height:38px}
+.actionAvatar{width:44px;height:44px}
+.avatar{width:38px;height:38px;font-size:14px;border-width:1.5px}
+.plus{width:17px;height:17px;bottom:-4px;font-size:12px;border-width:1.5px}
+
+@media (max-width:480px){
+ :global(.actions){right:8px;bottom:82px;width:46px;gap:7px}
+ :global(.actions .action){width:42px}
+ :global(.actions .circle){width:36px;height:36px}
+ :global(.actions .circle svg){width:19px;height:19px}
+ :global(.actions .disc){width:36px;height:36px}
+ .actionAvatar{width:42px;height:42px}
+ .avatar{width:36px;height:36px}
+ .plus{width:16px;height:16px;font-size:11px}
+}
