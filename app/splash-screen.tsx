@@ -18,10 +18,19 @@ export default function SplashScreen() {
     let progressTimer: ReturnType<typeof setInterval> | undefined;
     let ready = false;
     const startedAt = Date.now();
+    const root = document.documentElement;
+    const body = document.body;
+    const previousRootBg = root.style.backgroundColor;
+    const previousBodyBg = body.style.backgroundColor;
+
+    root.style.backgroundColor = "#02030a";
+    body.style.backgroundColor = "#02030a";
 
     try {
       if (sessionStorage.getItem(SPLASH_KEY) === "1") {
         setVisible(false);
+        root.style.backgroundColor = previousRootBg;
+        body.style.backgroundColor = previousBodyBg;
         return;
       }
       sessionStorage.setItem(SPLASH_KEY, "1");
@@ -40,7 +49,11 @@ export default function SplashScreen() {
       hideTimer = setTimeout(() => {
         setProgress(100);
         setLeaving(true);
-        hideTimer = setTimeout(() => setVisible(false), 520);
+        hideTimer = setTimeout(() => {
+          setVisible(false);
+          root.style.backgroundColor = previousRootBg;
+          body.style.backgroundColor = previousBodyBg;
+        }, 560);
       }, wait);
     };
 
@@ -60,6 +73,8 @@ export default function SplashScreen() {
       if (hideTimer) clearTimeout(hideTimer);
       if (maxTimer) clearTimeout(maxTimer);
       if (progressTimer) clearInterval(progressTimer);
+      root.style.backgroundColor = previousRootBg;
+      body.style.backgroundColor = previousBodyBg;
     };
   }, []);
 
@@ -68,7 +83,9 @@ export default function SplashScreen() {
   return (
     <div className={`xingliuSplash ${leaving ? "xingliuSplashLeaving" : ""}`} aria-hidden="true">
       <style jsx global>{`
-        .xingliuSplash{position:fixed;inset:0;z-index:99999;overflow:hidden;background:#02030a;color:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;opacity:1;transition:opacity .52s ease,transform .52s cubic-bezier(.2,.8,.2,1);isolation:isolate}
+        .xingliuSplash{position:fixed;inset:0;z-index:99999;overflow:hidden;background:#02030a;color:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;opacity:1;transform:scale(1);transition:opacity .56s ease,transform .56s cubic-bezier(.2,.8,.2,1);isolation:isolate;contain:layout paint}
+        .xingliuSplash:after{content:"";position:absolute;inset:-20%;background:radial-gradient(circle at 50% 48%,rgba(103,139,255,.13),transparent 28%,rgba(0,0,0,0) 55%);opacity:0;transform:scale(.7);pointer-events:none;transition:opacity .56s ease,transform .7s cubic-bezier(.2,.8,.2,1)}
+        .xingliuSplashLeaving:after{opacity:1;transform:scale(1.5)}
         .xingliuSplashLeaving{opacity:0;transform:scale(1.035);pointer-events:none}
         .xingliuSpaceGlow{position:absolute;border-radius:50%;filter:blur(55px);pointer-events:none;animation:xingliuGlow 4s ease-in-out infinite alternate}
         .xingliuGlowOne{width:48vw;height:48vw;right:-18vw;top:2vh;background:radial-gradient(circle,rgba(47,91,255,.5),transparent 70%)}
@@ -88,7 +105,6 @@ export default function SplashScreen() {
         .xingliuLoading{width:170px;height:3px;border-radius:999px;background:rgba(255,255,255,.11);overflow:hidden;box-shadow:0 0 12px rgba(70,90,255,.12)}
         .xingliuLoadingBar{height:100%;border-radius:999px;background:linear-gradient(90deg,#43a8ff,#7a59ff,#b46cff);box-shadow:0 0 13px rgba(93,109,255,.8);transition:width .12s linear}
         .xingliuLoadingText{font-size:9px;letter-spacing:3px;color:rgba(255,255,255,.35)}
-        @keyframes xingliuLoad{from{transform:translateX(-110%)}to{transform:translateX(0)}}
         @keyframes xingliuTwinkle{0%,100%{opacity:.4}50%{opacity:.95}}
         @keyframes xingliuGlow{from{transform:scale(.92);opacity:.45}to{transform:scale(1.08);opacity:.8}}
         @keyframes xingliuOrbit{from{rotate:0deg}to{rotate:360deg}}
@@ -99,7 +115,7 @@ export default function SplashScreen() {
         @keyframes xingliuTextIn{from{opacity:0;letter-spacing:18px;filter:blur(7px)}to{opacity:1;letter-spacing:7px;filter:blur(0)}}
         @keyframes xingliuFadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
         @media (min-width:700px){.xingliuMark{width:185px;height:145px}.xingliuTitle{font-size:58px}.xingliuTagline{bottom:19%}}
-        @media (prefers-reduced-motion:reduce){.xingliuSplash,.xingliuStars,.xingliuSpaceGlow,.xingliuOrbit,.xingliuBrand,.xingliuMark,.xingliuMarkRing,.xingliuMarkCore,.xingliuTitle,.xingliuEnglish,.xingliuTagline{animation:none!important;transition:none!important}}
+        @media (prefers-reduced-motion:reduce){.xingliuSplash,.xingliuSplash:after,.xingliuStars,.xingliuSpaceGlow,.xingliuOrbit,.xingliuBrand,.xingliuMark,.xingliuMarkRing,.xingliuMarkCore,.xingliuTitle,.xingliuEnglish,.xingliuTagline{animation:none!important;transition:none!important}}
       `}</style>
       <div className="xingliuSpaceGlow xingliuGlowOne" /><div className="xingliuSpaceGlow xingliuGlowTwo" />
       <div className="xingliuOrbit orbitOne" /><div className="xingliuOrbit orbitTwo" />
