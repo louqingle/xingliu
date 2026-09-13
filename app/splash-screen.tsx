@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const SPLASH_KEY = "xingliu_splash_seen_v3";
-const READY_EVENT = "xingliu-home-ready";
+const SPLASH_KEY = "xingliu_splash_seen_v4";
 const MIN_SHOW_MS = 1250;
 const MAX_SHOW_MS = 3800;
 
@@ -36,13 +35,7 @@ export default function SplashScreen() {
       sessionStorage.setItem(SPLASH_KEY, "1");
     } catch {}
 
-    progressTimer = setInterval(() => {
-      const elapsed = Date.now() - startedAt;
-      const next = Math.min(96, Math.round((elapsed / MAX_SHOW_MS) * 100));
-      setProgress(next);
-    }, 40);
-
-    const leave = () => {
+    const finish = () => {
       if (!ready) return;
       const wait = Math.max(0, MIN_SHOW_MS - (Date.now() - startedAt));
       if (hideTimer) clearTimeout(hideTimer);
@@ -57,19 +50,38 @@ export default function SplashScreen() {
       }, wait);
     };
 
-    const onReady = () => {
+    const onVideoReady = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLVideoElement)) return;
+      if (!target.currentSrc && !target.src) return;
       ready = true;
-      leave();
+      finish();
     };
 
-    window.addEventListener(READY_EVENT, onReady);
+    document.addEventListener("loadeddata", onVideoReady, true);
+    document.addEventListener("canplay", onVideoReady, true);
+
+    progressTimer = setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      setProgress(Math.min(96, Math.round((elapsed / MAX_SHOW_MS) * 100)));
+    }, 40);
+
     maxTimer = setTimeout(() => {
       ready = true;
-      leave();
+      finish();
     }, MAX_SHOW_MS);
 
+    const existingVideo = document.querySelector("video");
+    if (existingVideo instanceof HTMLVideoElement) {
+      if (existingVideo.readyState >= 2) {
+        ready = true;
+        finish();
+      }
+    }
+
     return () => {
-      window.removeEventListener(READY_EVENT, onReady);
+      document.removeEventListener("loadeddata", onVideoReady, true);
+      document.removeEventListener("canplay", onVideoReady, true);
       if (hideTimer) clearTimeout(hideTimer);
       if (maxTimer) clearTimeout(maxTimer);
       if (progressTimer) clearInterval(progressTimer);
