@@ -5,251 +5,27 @@ import { ArrowLeft, Check, Loader2, Music2, Video, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
-const MAX_SIZE = 100 * 1024 * 1024;
+const MAX_SIZE = 200 * 1024 * 1024;
 
-async function createVideoCover(file: File, sourceUrl: string): Promise<Blob | null> {
-  return new Promise((resolve) => {
-    const video = document.createElement("video");
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = "metadata";
-    video.src = sourceUrl;
-
-    const cleanup = () => {
-      video.pause();
-      video.removeAttribute("src");
-      video.load();
-    };
-
-    const finish = () => {
-      try {
-        const width = video.videoWidth || 720;
-        const height = video.videoHeight || 1280;
-        const targetW = 720;
-        const targetH = 1280;
-        const scale = Math.max(targetW / width, targetH / height);
-        const drawW = width * scale;
-        const drawH = height * scale;
-        const canvas = document.createElement("canvas");
-        canvas.width = targetW;
-        canvas.height = targetH;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          cleanup();
-          resolve(null);
-          return;
-        }
-        ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, targetW, targetH);
-        ctx.drawImage(video, (targetW - drawW) / 2, (targetH - drawH) / 2, drawW, drawH);
-        canvas.toBlob((blob) => {
-          cleanup();
-          resolve(blob);
-        }, "image/jpeg", 0.84);
-      } catch {
-        cleanup();
-        resolve(null);
-      }
-    };
-
-    video.onerror = () => {
-      cleanup();
-      resolve(null);
-    };
-    video.onloadedmetadata = () => {
-      const duration = Number.isFinite(video.duration) ? video.duration : 0;
-      video.currentTime = duration > 0.6 ? Math.min(0.6, duration * 0.15) : 0;
-    };
-    video.onseeked = finish;
-    video.onloadeddata = () => {
-      if (video.readyState >= 2 && video.currentTime === 0) finish();
-    };
-
-    void file;
+async function createVideoCover(sourceUrl: string): Promise<Blob | null> {
+  return new Promise(resolve => {
+    const video = document.createElement("video"); video.muted=true; video.playsInline=true; video.preload="metadata"; video.src=sourceUrl;
+    const done=()=>{try{const w=video.videoWidth||720,h=video.videoHeight||1280,tw=720,th=1280,s=Math.max(tw/w,th/h),c=document.createElement("canvas");c.width=tw;c.height=th;const ctx=c.getContext("2d");if(!ctx)return resolve(null);ctx.fillStyle="#000";ctx.fillRect(0,0,tw,th);ctx.drawImage(video,(tw-w*s)/2,(th-h*s)/2,w*s,h*s);c.toBlob(b=>resolve(b),"image/jpeg",.84)}catch{resolve(null)}video.removeAttribute("src");video.load()};
+    video.onerror=()=>resolve(null); video.onloadedmetadata=()=>{video.currentTime=video.duration>.6?.6:0}; video.onseeked=done;
   });
 }
 
-export default function UploadPage() {
-  const router = useRouter();
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState("");
-  const [title, setTitle] = useState("");
-  const [music, setMusic] = useState("原创音乐 · 星流");
-  const [publishing, setPublishing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState("");
-  const [done, setDone] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      if (!supabase) return;
-      const { data } = await supabase.auth.getSession();
-      if (active) setUserId(data.session?.user.id ?? null);
-    })();
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => () => {
-    if (preview) URL.revokeObjectURL(preview);
-  }, [preview]);
-
-  function chooseFile(e: ChangeEvent<HTMLInputElement>) {
-    const selected = e.target.files?.[0];
-    if (!selected) return;
-    setError("");
-    if (!selected.type.startsWith("video/")) return setError("请选择视频文件");
-    if (selected.size > MAX_SIZE) return setError("视频不能超过 100MB");
-    if (preview) URL.revokeObjectURL(preview);
-    setFile(selected);
-    setPreview(URL.createObjectURL(selected));
-    setProgress(0);
-  }
-
-  function clearFile(e?: React.MouseEvent) {
-    e?.stopPropagation();
-    if (preview) URL.revokeObjectURL(preview);
-    setFile(null);
-    setPreview("");
-    if (inputRef.current) inputRef.current.value = "";
-  }
-
-  async function publish() {
-    if (!supabase || !userId) return setError("请先登录星流账号");
-    if (!file) return setError("请先选择一个视频");
-    if (!title.trim()) return setError("给作品写一个标题吧");
-
-    setPublishing(true);
-    setError("");
-    setProgress(8);
-
-    const id = crypto.randomUUID();
-    const ext = file.name.split(".").pop()?.toLowerCase() || "mp4";
-    const path = `${userId}/${id}.${ext}`;
-
-    const { error: uploadError } = await supabase.storage.from("videos").upload(path, file, {
-      contentType: file.type,
-      cacheControl: "3600",
-      upsert: false,
-    });
-
-    if (uploadError) {
-      setPublishing(false);
-      setError(`上传失败：${uploadError.message}`);
-      return;
-    }
-
-    setProgress(70);
-    const { data: publicData } = supabase.storage.from("videos").getPublicUrl(path);
-    const videoUrl = publicData.publicUrl;
-
-    let coverUrl: string | null = null;
-    try {
-      const cover = await createVideoCover(file, preview);
-      if (cover) {
-        const coverPath = `${userId}/covers/${id}.jpg`;
-        const { error: coverError } = await supabase.storage.from("videos").upload(coverPath, cover, {
-          contentType: "image/jpeg",
-          cacheControl: "86400",
-          upsert: false,
-        });
-        if (!coverError) {
-          coverUrl = supabase.storage.from("videos").getPublicUrl(coverPath).data.publicUrl;
-        }
-      }
-    } catch {
-      coverUrl = null;
-    }
-
-    setProgress(86);
-    const { error: insertError } = await supabase.from("videos").insert({
-      user_id: userId,
-      url: videoUrl,
-      title: title.trim(),
-      music: music.trim() || "原创音乐 · 星流",
-      status: "published",
-      ...(coverUrl ? { cover_url: coverUrl } : {}),
-    });
-
-    if (insertError) {
-      await supabase.storage.from("videos").remove([path]);
-      if (coverUrl) await supabase.storage.from("videos").remove([`${userId}/covers/${id}.jpg`]);
-      setPublishing(false);
-      setError(`发布失败：${insertError.message}`);
-      return;
-    }
-
-    setProgress(100);
-    setDone(true);
-    setPublishing(false);
-    window.setTimeout(() => router.replace("/"), 900);
-  }
-
-  if (!userId && !done) {
-    return (
-      <main className="uploadPage">
-        <div className="uploadEmpty">
-          <Video size={48} />
-          <h2>登录后发布作品</h2>
-          <p>登录星流，分享你的精彩瞬间</p>
-          <button onClick={() => router.push("/auth")}>去登录</button>
-        </div>
-      </main>
-    );
-  }
-
-  return (
-    <main className="uploadPage">
-      <header className="uploadHeader">
-        <button onClick={() => router.back()} aria-label="返回"><ArrowLeft /></button>
-        <b>发布作品</b>
-        <button className="draft" onClick={() => router.push("/")}>取消</button>
-      </header>
-
-      <div className="uploadBody">
-        <div className={`videoPicker ${file ? "hasVideo" : ""}`} onClick={() => !file && inputRef.current?.click()}>
-          {preview ? (
-            <>
-              <video src={preview} controls playsInline />
-              <button className="removeVideo" onClick={clearFile} aria-label="删除视频"><X size={18} /></button>
-            </>
-          ) : (
-            <div className="pickerContent">
-              <Video size={42} />
-              <strong>选择视频</strong>
-              <span>MP4、MOV、WebM · 最大 100MB</span>
-            </div>
-          )}
-        </div>
-
-        <input ref={inputRef} hidden type="file" accept="video/*" onChange={chooseFile} />
-
-        <textarea value={title} onChange={e => setTitle(e.target.value.slice(0, 120))} placeholder="写下作品标题或介绍……" maxLength={120} />
-        <div className="counter">{title.length}/120</div>
-
-        <div className="musicInput">
-          <Music2 size={20} />
-          <input value={music} onChange={e => setMusic(e.target.value.slice(0, 80))} placeholder="添加音乐" />
-          <span>›</span>
-        </div>
-
-        <div className="publishTip"><Check size={18} /><span>公开发布 · 任何人都可以看到</span></div>
-
-        {publishing && (
-          <div className="uploadProgress">
-            <div><span>正在上传作品</span><b>{progress}%</b></div>
-            <div className="progressTrack"><i style={{ width: `${progress}%` }} /></div>
-          </div>
-        )}
-
-        {error && <div className="uploadError">{error}</div>}
-
-        <button className="publishBtn" disabled={publishing || !file || !title.trim()} onClick={publish}>
-          {publishing ? <><Loader2 className="spin" size={20} />正在发布…</> : done ? <><Check size={20} />发布成功</> : "发布"}
-        </button>
-      </div>
-    </main>
-  );
+export default function UploadPage(){
+ const router=useRouter(); const inputRef=useRef<HTMLInputElement>(null); const [userId,setUserId]=useState<string|null>(null); const [file,setFile]=useState<File|null>(null); const [preview,setPreview]=useState(""); const [title,setTitle]=useState(""); const [music,setMusic]=useState("原创音乐 · 星流"); const [publishing,setPublishing]=useState(false); const [progress,setProgress]=useState(0); const [error,setError]=useState(""); const [done,setDone]=useState(false);
+ useEffect(()=>{(async()=>{if(!supabase)return;const{data}=await supabase.auth.getSession();if(!data.session){router.replace("/auth");return}setUserId(data.session.user.id)})()},[router]);
+ useEffect(()=>()=>{if(preview)URL.revokeObjectURL(preview)},[preview]);
+ function choose(e:ChangeEvent<HTMLInputElement>){const f=e.target.files?.[0];if(!f)return;if(!f.type.startsWith("video/"))return setError("请选择视频文件");if(f.size>MAX_SIZE)return setError("视频不能超过 200MB");if(preview)URL.revokeObjectURL(preview);setError("");setFile(f);setPreview(URL.createObjectURL(f))}
+ function clear(e?:React.MouseEvent){e?.stopPropagation();if(preview)URL.revokeObjectURL(preview);setFile(null);setPreview("");if(inputRef.current)inputRef.current.value=""}
+ async function publish(){if(!supabase||!userId||!file)return setError("请先登录并选择视频");if(!title.trim())return setError("给作品写一个标题吧");setPublishing(true);setError("");setProgress(8);const id=crypto.randomUUID(),ext=file.name.split(".").pop()?.toLowerCase()||"mp4",path=`${userId}/${id}.${ext}`;
+  const{error:upErr}=await supabase.storage.from("videos").upload(path,file,{contentType:file.type,cacheControl:"3600",upsert:false});if(upErr){setPublishing(false);return setError(`上传失败：${upErr.message}`)}setProgress(65);const videoUrl=supabase.storage.from("videos").getPublicUrl(path).data.publicUrl;let coverUrl:string|null=null;
+  try{const cover=await createVideoCover(preview);if(cover){const cp=`${userId}/covers/${id}.jpg`;const{error}=await supabase.storage.from("videos").upload(cp,cover,{contentType:"image/jpeg",cacheControl:"86400"});if(!error)coverUrl=supabase.storage.from("videos").getPublicUrl(cp).data.publicUrl}}catch{}
+  setProgress(86);const{error:dbErr}=await supabase.from("videos").insert({user_id:userId,url:videoUrl,title:title.trim(),music:music.trim()||"原创音乐 · 星流",status:"published",...(coverUrl?{cover_url:coverUrl}:{})});if(dbErr){await supabase.storage.from("videos").remove([path]);return setError(`发布失败：${dbErr.message}`)}setProgress(100);setDone(true);setPublishing(false);setTimeout(()=>router.replace("/profile"),900)
+ }
+ if(!userId&&!done)return <main className="uploadPage"><div className="uploadEmpty"><Video size={48}/><h2>登录后发布作品</h2><p>登录星流，分享你的精彩瞬间</p><button onClick={()=>router.push("/auth")}>去登录</button></div></main>;
+ return <main className="uploadPage"><style jsx global>{`.uploadPage{min-height:100dvh;background:#050505;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}.uploadHeader{height:58px;border-bottom:1px solid #222;display:flex;align-items:center;justify-content:space-between;padding:0 18px;position:sticky;top:0;background:rgba(5,5,5,.92);z-index:5}.uploadHeader button{background:none;border:0;color:#fff;display:grid;place-items:center}.uploadHeader .draft{color:#aaa}.uploadBody{max-width:620px;margin:auto;padding:22px 18px 70px}.videoPicker{height:420px;border:1px dashed #444;border-radius:18px;background:#101010;display:grid;place-items:center;position:relative;overflow:hidden}.videoPicker video{width:100%;height:100%;object-fit:contain;background:#000}.pickerContent{text-align:center;color:#999;display:grid;place-items:center;gap:9px}.pickerContent strong{color:#fff}.pickerContent span{font-size:12px}.removeVideo{position:absolute;right:10px;top:10px;border:0;border-radius:50%;width:34px;height:34px;background:#000b;color:#fff}.uploadBody textarea{margin-top:18px;width:100%;min-height:110px;background:#111;border:1px solid #292929;border-radius:13px;color:#fff;padding:13px;resize:none;outline:none;font-size:15px}.counter{text-align:right;color:#666;font-size:11px;margin-top:5px}.musicInput{margin-top:12px;height:50px;background:#111;border:1px solid #292929;border-radius:13px;display:flex;align-items:center;gap:10px;padding:0 13px}.musicInput input{flex:1;background:none;border:0;outline:0;color:#fff}.musicInput span{color:#777}.publishTip{margin:14px 2px;color:#999;font-size:12px;display:flex;gap:8px;align-items:center}.publishBtn{margin-top:12px;width:100%;height:50px;border:0;border-radius:13px;background:#fff;color:#000;font-weight:800;display:flex;align-items:center;justify-content:center;gap:8px}.publishBtn:disabled{opacity:.4}.uploadError{color:#ff7777;font-size:13px;margin:10px 0}.uploadProgress{margin:14px 0}.uploadProgress>div:first-child{display:flex;justify-content:space-between;font-size:12px;color:#aaa}.progressTrack{height:4px;background:#222;border-radius:9px;margin-top:8px;overflow:hidden}.progressTrack i{display:block;height:100%;background:#fff}.uploadEmpty{text-align:center;padding:110px 20px;color:#888}.uploadEmpty h2{color:#fff}.uploadEmpty button{margin-top:15px;border:0;border-radius:12px;padding:12px 28px;background:#fff;color:#000;font-weight:700}.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style><header className="uploadHeader"><button onClick={()=>router.back()}><ArrowLeft/></button><b>发布作品</b><button className="draft" onClick={()=>router.push("/")}>取消</button></header><div className="uploadBody"><div className="videoPicker">{preview?<><video src={preview} controls playsInline/><button className="removeVideo" onClick={clear}><X size={18}/></button></>:<div className="pickerContent"><Video size={42}/><strong>选择视频</strong><span>MP4、MOV、WebM · 最大 200MB</span></div>}<input ref={inputRef} hidden type="file" accept="video/*" onChange={choose}/></div><button style={{marginTop:12,width:'100%',height:44,border:'1px solid #333',borderRadius:12,background:'#111',color:'#fff'}} onClick={()=>inputRef.current?.click()}>{file?"更换视频":"从手机选择视频"}</button><textarea value={title} onChange={e=>setTitle(e.target.value.slice(0,120))} placeholder="写下作品标题或介绍……" maxLength={120}/><div className="counter">{title.length}/120</div><div className="musicInput"><Music2 size={20}/><input value={music} onChange={e=>setMusic(e.target.value.slice(0,80))}/><span>›</span></div><div className="publishTip"><Check size={18}/><span>公开发布 · 任何人都可以看到</span></div>{publishing&&<div className="uploadProgress"><div><span>正在发布作品</span><b>{progress}%</b></div><div className="progressTrack"><i style={{width:`${progress}%`}}/></div></div>}{error&&<div className="uploadError">{error}</div>}<button className="publishBtn" disabled={publishing||!file||!title.trim()} onClick={publish}>{publishing?<><Loader2 className="spin" size={20}/>正在发布…</>:done?<><Check size={20}/>发布成功</>:"发布到星流"}</button></div></main>;
 }
