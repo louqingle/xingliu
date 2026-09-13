@@ -38,6 +38,10 @@ export const metadata: Metadata = {
     title: "星流",
     statusBarStyle: "black-translucent",
   },
+  icons: {
+    icon: "/icon.svg",
+    apple: "/apple-icon.svg",
+  },
 };
 
 export const viewport: Viewport = {
@@ -54,6 +58,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+      </head>
       <body>
         <SplashScreen />
         <VideoFullscreen />
