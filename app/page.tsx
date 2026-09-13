@@ -10,45 +10,73 @@ import styles from "./avatar-position.module.css";
 
 type Video={id:string;src:string;username:string;title:string;music:string;likes:number;comments:number;avatar:string;avatarUrl:string|null;userId:string;createdAt:string;coverUrl:string|null};
 type Comment={id:string;content:string;created_at:string;user_id:string;username:string;avatar_url:string|null};
+type Cursor={createdAt:string}|null;
+const PAGE_SIZE=8;
 const fmt=(n:number)=>n>=1000000?`${(n/1000000).toFixed(1)}M`:n>=10000?`${(n/10000).toFixed(1)}万`:n>=1000?`${(n/1000).toFixed(1)}K`:String(n);
 const HOME_READY_EVENT="xingliu-home-ready";
 
 export default function Home(){
  const router=useRouter();
  const feed=useRef<HTMLDivElement>(null);const players=useRef<Record<string,HTMLVideoElement|null>>({});const watchVideo=useRef<string|null>(null);const watchStarted=useRef(Date.now());
- const [videos,setVideos]=useState<Video[]>([]),[index,setIndex]=useState(0),[muted,setMuted]=useState(true),[liked,setLiked]=useState<string[]>([]),[saved,setSaved]=useState<string[]>([]),[following,setFollowing]=useState<string[]>([]),[uid,setUid]=useState<string|null>(null),[tab,setTab]=useState<"推荐"|"关注">("推荐"),[search,setSearch]=useState(false),[q,setQ]=useState(""),[toast,setToast]=useState(""),[loading,setLoading]=useState(true),[feedError,setFeedError]=useState(""),[commentVideo,setCommentVideo]=useState<Video|null>(null),[comments,setComments]=useState<Comment[]>([]),[commentText,setCommentText]=useState(""),[commentLoading,setCommentLoading]=useState(false),[commentSending,setCommentSending]=useState(false);
+ const [videos,setVideos]=useState<Video[]>([]),[index,setIndex]=useState(0),[muted,setMuted]=useState(true),[liked,setLiked]=useState<string[]>([]),[saved,setSaved]=useState<string[]>([]),[following,setFollowing]=useState<string[]>([]),[uid,setUid]=useState<string|null>(null),[tab,setTab]=useState<"推荐"|"关注">("推荐"),[search,setSearch]=useState(false),[q,setQ]=useState(""),[toast,setToast]=useState(""),[loading,setLoading]=useState(true),[loadingMore,setLoadingMore]=useState(false),[hasMore,setHasMore]=useState(true),[cursor,setCursor]=useState<Cursor>(null),[feedError,setFeedError]=useState(""),[commentVideo,setCommentVideo]=useState<Video|null>(null),[comments,setComments]=useState<Comment[]>([]),[commentText,setCommentText]=useState(""),[commentLoading,setCommentLoading]=useState(false),[commentSending,setCommentSending]=useState(false);
 
- const loadFeed=useCallback(async(user:string|null)=>{
-  if(!supabase)return;
-  setLoading(true);setFeedError("");
-  const base=await supabase.from("videos").select("id,url,title,music,like_count,comment_count,user_id,created_at,cover_url").eq("status","published").order("created_at",{ascending:false}).limit(100);
-  if(base.error){setFeedError(base.error.message);setVideos([]);setLoading(false);window.dispatchEvent(new Event(HOME_READY_EVENT));return;}
-  const rows=base.data||[];
+ const mapRows=useCallback((rows:any[],profiles:any[])=>rows.map((v:any)=>{const p=profiles.find(x=>x.id===v.user_id);const name=p?.username||p?.nickname||"星流用户";return{id:v.id,src:v.url,title:v.title||"分享一个瞬间",music:v.music||"原创音乐 · 星流",username:name,likes:v.like_count||0,comments:v.comment_count||0,avatar:(name||"星").slice(0,1),avatarUrl:p?.avatar_url||null,userId:v.user_id,createdAt:v.created_at,coverUrl:v.cover_url||null};}),[]);
+
+ const fetchPage=useCallback(async(user:string|null,mode:"推荐"|"关注",before:Cursor)=>{
+  if(!supabase)return {items:[],next:null,more:false,error:"Supabase 未初始化"};
+  if(mode==="关注"&&!user)return {items:[],next:null,more:false,error:null};
+  let rows:any[]=[];
+  if(mode==="关注"){
+   const r=await supabase.rpc("get_following_video_feed",{p_limit:PAGE_SIZE,p_before:before?.createdAt||null});
+   if(r.error)return {items:[],next:null,more:false,error:r.error.message};
+   rows=r.data||[];
+  }else{
+   let query=supabase.from("videos").select("id,url,title,music,like_count,comment_count,user_id,created_at,cover_url").eq("status","published").order("created_at",{ascending:false}).order("id",{ascending:false}).limit(PAGE_SIZE);
+   if(before?.createdAt)query=query.lt("created_at",before.createdAt);
+   const r=await query;
+   if(r.error)return {items:[],next:null,more:false,error:r.error.message};
+   rows=r.data||[];
+  }
   const ids=[...new Set(rows.map((v:any)=>v.user_id))];
   let profiles:any[]=[];
-  if(ids.length){const p=await supabase.from("profiles").select("id,username,nickname,avatar_url").in("id",ids);if(p.error){setFeedError(p.error.message);setVideos([]);setLoading(false);window.dispatchEvent(new Event(HOME_READY_EVENT));return;}profiles=p.data||[];}
-  const mapped=rows.map((v:any)=>{const p=profiles.find(x=>x.id===v.user_id);const name=p?.username||p?.nickname||"星流用户";return{id:v.id,src:v.url,title:v.title||"分享一个瞬间",music:v.music||"原创音乐 · 星流",username:name,likes:v.like_count||0,comments:v.comment_count||0,avatar:(name||"星").slice(0,1),avatarUrl:p?.avatar_url||null,userId:v.user_id,createdAt:v.created_at,coverUrl:v.cover_url||null};});
-  setVideos(mapped);
+  if(ids.length){const p=await supabase.from("profiles").select("id,username,nickname,avatar_url").in("id",ids);if(p.error)return {items:[],next:null,more:false,error:p.error.message};profiles=p.data||[];}
+  const items=mode==="关注"?rows.map((v:any)=>{const p=profiles.find(x=>x.id===v.user_id);const name=p?.username||p?.nickname||"星流用户";return{id:v.id,src:v.url,title:v.title||"分享一个瞬间",music:v.music||"原创音乐 · 星流",username:name,likes:v.like_count||0,comments:v.comment_count||0,avatar:(name||"星").slice(0,1),avatarUrl:p?.avatar_url||null,userId:v.user_id,createdAt:v.created_at,coverUrl:v.cover_url||null};}):mapRows(rows,profiles);
+  const next=items.length?{createdAt:items[items.length-1].createdAt}:null;
+  return {items,next,more:items.length===PAGE_SIZE,error:null};
+ },[mapRows]);
+
+ const loadFeed=useCallback(async(user:string|null)=>{
+  setLoading(true);setLoadingMore(false);setFeedError("");setCursor(null);setHasMore(true);setIndex(0);feed.current?.scrollTo({top:0,behavior:"auto"});
+  const r=await fetchPage(user,tab,null);
+  if(r.error){setFeedError(r.error);setVideos([]);setHasMore(false);setLoading(false);window.dispatchEvent(new Event(HOME_READY_EVENT));return;}
+  setVideos(r.items);setCursor(r.next);setHasMore(r.more);
   if(user){
    const [l,f,s]=await Promise.all([
-    supabase.from("likes").select("video_id").eq("user_id",user),
-    supabase.from("follows").select("following_id").eq("follower_id",user),
-    supabase.from("saved_videos").select("video_id").eq("user_id",user)
+    supabase?.from("likes").select("video_id").eq("user_id",user),
+    supabase?.from("follows").select("following_id").eq("follower_id",user),
+    supabase?.from("saved_videos").select("video_id").eq("user_id",user)
    ]);
-   setLiked((l.data||[]).map((x:any)=>x.video_id));
-   setFollowing((f.data||[]).map((x:any)=>x.following_id));
-   setSaved((s.data||[]).map((x:any)=>x.video_id));
-  } else { setLiked([]);setFollowing([]);setSaved([]); }
-  setLoading(false);
-  requestAnimationFrame(()=>window.dispatchEvent(new Event(HOME_READY_EVENT)));
- },[]);
+   setLiked((l?.data||[]).map((x:any)=>x.video_id));setFollowing((f?.data||[]).map((x:any)=>x.following_id));setSaved((s?.data||[]).map((x:any)=>x.video_id));
+  }else{setLiked([]);setFollowing([]);setSaved([]);}
+  setLoading(false);requestAnimationFrame(()=>window.dispatchEvent(new Event(HOME_READY_EVENT)));
+ },[fetchPage,tab]);
+
+ const loadMore=useCallback(async()=>{
+  if(loading||loadingMore||!hasMore)return;
+  setLoadingMore(true);
+  const r=await fetchPage(uid,tab,cursor);
+  if(r.error){setToast("加载更多失败："+r.error);setLoadingMore(false);return;}
+  if(r.items.length){setVideos(x=>[...x,...r.items]);setCursor(r.next);}
+  setHasMore(r.more);setLoadingMore(false);
+ },[cursor,fetchPage,hasMore,loading,loadingMore,tab,uid]);
 
  useEffect(()=>{let alive=true;(async()=>{if(!supabase)return;const {data:{session}}=await supabase.auth.getSession();if(!alive)return;const id=session?.user.id||null;setUid(id);await loadFeed(id);})();return()=>{alive=false}},[loadFeed]);
  useEffect(()=>{if(!supabase)return;const {data:sub}=supabase.auth.onAuthStateChange((_e,s)=>{const id=s?.user.id||null;setUid(id);void loadFeed(id)});return()=>sub.subscription.unsubscribe()},[loadFeed]);
- const list=useMemo(()=>{const base=tab==="关注"?videos.filter(v=>following.includes(v.userId)):videos;if(tab==="关注")return base;const hours=(date:string)=>Math.max(0,(Date.now()-new Date(date).getTime())/3600000);const score=(v:Video)=>v.likes*2.2+v.comments*3.5+Math.max(0,72-hours(v.createdAt))*1.2+(following.includes(v.userId)?10:0);return [...base].sort((a,b)=>score(b)-score(a));},[tab,videos,following]);
+ useEffect(()=>{if(!loading&&tab==="关注"&&!uid)setHasMore(false)},[loading,tab,uid]);
+ const list=useMemo(()=>{const base=tab==="关注"?videos:videos;const hours=(date:string)=>Math.max(0,(Date.now()-new Date(date).getTime())/3600000);const score=(v:Video)=>v.likes*2.2+v.comments*3.5+Math.max(0,72-hours(v.createdAt))*1.2+(following.includes(v.userId)?10:0);return tab==="关注"?base:[...base].sort((a,b)=>score(b)-score(a));},[tab,videos,following]);
  const active=list[index]||list[0];
- useEffect(()=>{setIndex(0);feed.current?.scrollTo({top:0,behavior:"auto"})},[tab]);
- useEffect(()=>{const el=feed.current;if(!el)return;let raf=0;const onScroll=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;const h=el.clientHeight||innerHeight;const i=Math.max(0,Math.min(Math.max(list.length-1,0),Math.round(el.scrollTop/h)));setIndex(x=>x===i?x:i)})};el.addEventListener("scroll",onScroll,{passive:true});return()=>{el.removeEventListener("scroll",onScroll);if(raf)cancelAnimationFrame(raf)}},[list.length]);
+ useEffect(()=>{setIndex(0);feed.current?.scrollTo({top:0,behavior:"auto"});if(uid!==undefined)void loadFeed(uid)},[tab]);
+ useEffect(()=>{const el=feed.current;if(!el)return;let raf=0;const onScroll=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;const h=el.clientHeight||innerHeight;const i=Math.max(0,Math.min(Math.max(list.length-1,0),Math.round(el.scrollTop/h)));setIndex(x=>x===i?x:i);if(i>=list.length-2&&hasMore&&!loadingMore)void loadMore();})};el.addEventListener("scroll",onScroll,{passive:true});return()=>{el.removeEventListener("scroll",onScroll);if(raf)cancelAnimationFrame(raf)}},[list.length,hasMore,loadingMore,loadMore]);
  useEffect(()=>{Object.entries(players.current).forEach(([id,v])=>{if(!v)return;v.muted=muted;if(id===active?.id){v.play().catch(()=>{});}else v.pause()})},[active?.id,muted]);
  useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(""),1800);return()=>clearTimeout(t)},[toast]);
  useEffect(()=>{if(!active?.id||!supabase||!uid)return;const now=Date.now();if(watchVideo.current&&watchVideo.current!==active.id){const ms=Math.max(0,now-watchStarted.current);if(ms>500)void supabase.from("video_events").insert({user_id:uid,video_id:watchVideo.current,event_type:"watch",watch_ms:ms});}watchVideo.current=active.id;watchStarted.current=now;void supabase.from("video_events").insert({user_id:uid,video_id:active.id,event_type:"impression"});},[active?.id,uid]);
@@ -70,6 +98,8 @@ export default function Home(){
     <div className="actions"><Link href={`/user?username=${encodeURIComponent(v.username)}`} className={styles.actionAvatar} aria-label={`查看 @${v.username}`}><span className={styles.avatar}>{v.avatarUrl?<img src={v.avatarUrl} alt=""/>:v.avatar}</span>{v.userId!==uid&&!isFollow&&<span className={styles.plus}>+</span>}</Link><button className="action" onClick={()=>like(v)}><span className={`circle ${isLike?"like on":""}`}><Heart size={27} fill={isLike?"currentColor":"none"}/></span><b>{fmt(v.likes)}</b></button><button className="action" onClick={()=>openComments(v)}><span className="circle"><MessageCircle size={27}/></span><b>{fmt(v.comments)}</b></button><button className="action" onClick={()=>save(v)}><span className={`circle ${isSave?"saved":""}`}><Bookmark size={25} fill={isSave?"currentColor":"none"}/></span><b>{isSave?"已收藏":"收藏"}</b></button><button className="action" onClick={async()=>{void event("share",v.id);const url=`${location.origin}/video/${v.id}`;if(navigator.share)await navigator.share({title:v.title,url}).catch(()=>{});else{await navigator.clipboard?.writeText(url);setToast("链接已复制")}}}><span className="circle"><Share2 size={25}/></span><b>分享</b></button><span className="disc"><Play size={18}/></span></div>
     <div className="info"><div className="author"><b className="authorName">@{v.username}</b>{v.userId!==uid&&<button className={`follow ${isFollow?"followed":""}`} onClick={()=>follow(v)}>{isFollow?"已关注":"关注"}</button>}</div><div className="title">{v.title}</div><div className="music">♫ {v.music}</div></div>
    </section>})}
+   {!loading&&!feedError&&loadingMore&&<div style={{position:"absolute",left:0,right:0,bottom:82,zIndex:60,textAlign:"center",fontSize:12,color:"rgba(255,255,255,.72)",pointerEvents:"none"}}>正在加载更多…</div>}
+   {!loading&&!feedError&&!loadingMore&&!hasMore&&list.length>0&&<div style={{position:"absolute",left:0,right:0,bottom:82,zIndex:60,textAlign:"center",fontSize:11,color:"rgba(255,255,255,.5)",pointerEvents:"none"}}>已经到底了</div>}
   </div>
   <nav className="nav"><Link className="navItem active" href="/"><HomeIcon size={22}/><span>首页</span></Link><Link className="navItem" href="/discover"><Users size={22}/><span>发现</span></Link><Link className="publish" href="/upload"><Plus size={26}/></Link><Link className="navItem" href="/messages"><Inbox size={22}/><span>消息</span></Link><Link className="navItem" href="/profile"><UserRound size={22}/><span>我</span></Link></nav>
   {toast&&<div className="toast">{toast}</div>}
