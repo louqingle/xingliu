@@ -1,5 +1,5 @@
-import StudioV4 from "./studio-v4";
+import NoZoomStudio from "./no-zoom";
 
 export default function UploadPage() {
-  return <StudioV4 />;
+  return <NoZoomStudio />;
 }
