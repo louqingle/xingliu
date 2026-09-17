@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowRight, CheckCircle2, Eye, EyeOff, KeyRound, Mail, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Eye, EyeOff, HelpCircle, KeyRound, LockKeyhole, Mail, MoreHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
@@ -129,27 +129,138 @@ export default function AuthPage() {
   }
 
   return (
-    <main className="auth-page-v2">
+    <main className="login-page">
       <style jsx global>{`
-        .auth-page-v2{min-height:100dvh;overflow:auto;background:#050505;color:#fff;display:flex;align-items:center;justify-content:center;padding:24px 18px;position:relative;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}.auth-page-v2:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 12%,#292929 0,transparent 38%),radial-gradient(circle at 12% 90%,#151515 0,transparent 30%);pointer-events:none}.auth-card-v2{position:relative;width:min(430px,100%);padding:28px 24px 22px;border:1px solid #ffffff12;border-radius:26px;background:#0d0d0de8;box-shadow:0 30px 100px #000;backdrop-filter:blur(24px)}.auth-brand-v2{display:flex;align-items:center;gap:11px;margin-bottom:24px}.auth-mark-v2{width:42px;height:42px;border-radius:13px;background:#fff;color:#000;display:grid;place-items:center}.auth-brand-v2 strong{font-size:21px}.auth-brand-v2 span{display:block;color:#666;font-size:11px;margin-top:2px}.auth-switch-v2{display:grid;grid-template-columns:1fr 1fr;background:#171717;border-radius:12px;padding:4px;margin-bottom:17px}.auth-switch-v2 button{height:40px;border-radius:9px;color:#777;font-weight:700}.auth-switch-v2 button.active{background:#fff;color:#000}.auth-method-v2{display:flex;gap:7px;margin-bottom:22px}.auth-method-v2 button{height:34px;padding:0 13px;border:1px solid #262626;border-radius:9px;background:#111;color:#777;font-size:12px;font-weight:700;display:flex;align-items:center;gap:5px}.auth-method-v2 button.active{color:#fff;background:#202020;border-color:#444}.auth-title-v2 h1{font-size:27px;letter-spacing:-.8px;margin:0}.auth-title-v2 p{color:#777;font-size:13px;margin:8px 0 21px}.auth-field-v2{margin-bottom:14px}.auth-field-v2 label{display:block;font-size:12px;color:#aaa;margin:0 0 7px 2px;font-weight:700}.auth-input-v2{height:52px;width:100%;border:1px solid #252525;background:#141414;border-radius:13px;color:#fff;outline:none;padding:0 14px;transition:.15s}.auth-input-v2:focus{border-color:#777;box-shadow:0 0 0 3px #ffffff0a}.auth-input-v2::placeholder{color:#555}.auth-password-v2{position:relative}.auth-password-v2 input{padding-right:48px}.auth-eye-v2{position:absolute;right:5px;top:5px;width:42px;height:42px;display:grid;place-items:center;color:#777}.auth-code-row{display:grid;grid-template-columns:1fr 112px;gap:8px}.auth-code-row button{border:1px solid #333;border-radius:13px;background:#191919;color:#fff;font-size:12px;font-weight:800}.auth-code-row button:disabled{opacity:.4}.auth-message-v2{border-radius:11px;padding:11px 12px;font-size:12px;line-height:1.5;margin:3px 0 13px;display:flex;align-items:center;gap:6px}.auth-error-v2{background:#291315;color:#ff9a9f;border:1px solid #632a30}.auth-success-v2{background:#122419;color:#8ee5aa;border:1px solid #234f31}.auth-submit-v2{height:53px;width:100%;border-radius:13px;background:#fff;color:#000;font-weight:850;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px}.auth-submit-v2:disabled{opacity:.45}.auth-forgot-v2{width:100%;text-align:right;color:#777;font-size:12px;margin:-3px 0 15px}.auth-trust-v2{display:flex;align-items:center;justify-content:center;gap:6px;color:#555;font-size:11px;margin:17px 0 0}.auth-tip-v2{text-align:center;color:#444;font-size:10px;line-height:1.6;margin:15px 10px 0}@media(max-width:480px){.auth-page-v2{align-items:flex-start;padding:20px 14px}.auth-card-v2{margin-top:5vh;padding:24px 18px 20px;border-radius:22px}}
+        *{box-sizing:border-box}
+        html,body{margin:0;padding:0;background:#fff;color:#171923;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif}
+        button,input{font:inherit}
+        button{cursor:pointer}
+        .login-page{min-height:100dvh;background:#fff;overflow:auto;position:relative}
+        .login-wrap{width:min(100%,760px);min-height:100dvh;margin:0 auto;padding:0 52px;position:relative}
+        .login-top{height:112px;display:flex;align-items:center;justify-content:space-between}
+        .back{width:48px;height:48px;border:0;background:transparent;color:#20222b;display:grid;place-items:center;border-radius:50%}
+        .help{border:0;background:transparent;color:#22242d;font-size:19px;font-weight:500;padding:10px 2px}
+        .login-content{padding-top:67px}
+        .login-title{font-size:40px;line-height:1.15;letter-spacing:-1.5px;font-weight:750;margin:0 0 55px;color:#171923}
+        .field{height:78px;background:#f7f7f8;border-radius:22px;display:flex;align-items:center;padding:0 30px;margin-bottom:20px;border:1px solid transparent;transition:.15s}
+        .field:focus-within{background:#f4f4f6;border-color:#e4e4e8}
+        .field-icon{width:38px;display:grid;place-items:center;color:#151722;flex:none}
+        .field input{width:100%;border:0;outline:0;background:transparent;font-size:23px;color:#242631;margin-left:17px;min-width:0}
+        .field input::placeholder{color:#b7b8be}
+        .country{display:flex;align-items:center;gap:7px;font-size:21px;white-space:nowrap}
+        .divider{height:26px;width:1px;background:#c8c9ce;margin-left:8px}
+        .method-row{height:35px;margin:0 0 31px;display:flex;align-items:center;gap:7px}
+        .method-row button{border:0;background:transparent;color:#075da9;font-size:20px;padding:0;font-weight:500}
+        .method-row .arrow{font-size:23px;transform:rotate(0deg);margin-right:2px}
+        .submit{height:78px;width:100%;border:0;border-radius:22px;background:#ffafbf;color:#fff;font-size:25px;font-weight:700;letter-spacing:.5px;margin-top:3px}
+        .submit:disabled{opacity:.72}
+        .agreement{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:32px;color:#8f9097;font-size:17px;flex-wrap:wrap}
+        .check{width:25px;height:25px;border:3px solid #b5b6bb;border-radius:50%;background:#fff;appearance:none;padding:0}
+        .check:checked{border-color:#0a62aa;box-shadow:inset 0 0 0 5px #fff;background:#0a62aa}
+        .agreement label{display:flex;align-items:center;gap:8px;cursor:pointer}
+        .agreement a{color:#075da9;text-decoration:none}
+        .bottom-actions{position:absolute;left:52px;right:52px;bottom:54px;display:flex;justify-content:center;align-items:center;gap:28px}
+        .social{width:96px;height:76px;border:1px solid #e3e3e7;border-radius:38px;background:#fff;display:grid;place-items:center;color:#050505}
+        .apple{font-size:36px;line-height:1}
+        .more{font-size:31px;letter-spacing:3px;color:#777}
+        .recover{height:76px;padding:0 34px;border:1px solid #e2e2e6;background:#fff;border-radius:38px;color:#7c7e86;font-size:22px}
+        .register-link{position:absolute;right:52px;top:113px;border:0;background:none;color:#075da9;font-size:16px}
+        .switcher{display:flex;gap:10px;margin-top:-39px;margin-bottom:26px}
+        .switcher button{border:0;background:none;color:#8b8c93;font-size:16px;padding:0}
+        .switcher .on{color:#075da9;font-weight:650}
+        .message{border-radius:14px;padding:13px 15px;font-size:14px;line-height:1.5;margin:15px 0;color:#9b2631;background:#fff1f2;border:1px solid #ffd2d7}
+        .success{color:#287346;background:#effaf2;border-color:#ccebd5;display:flex;gap:7px;align-items:center}
+        .otp-row{display:grid;grid-template-columns:1fr 150px;gap:12px}
+        .otp-row .field{margin:0}
+        .otp-send{height:78px;border:1px solid #e1e1e5;background:#fff;border-radius:22px;color:#075da9;font-size:17px;font-weight:650}
+        .otp-send:disabled{color:#aaa}
+        @media(max-width:600px){
+          .login-wrap{padding:0 26px}
+          .login-top{height:92px}
+          .login-content{padding-top:43px}
+          .login-title{font-size:31px;margin-bottom:42px}
+          .field{height:66px;border-radius:18px;padding:0 20px;margin-bottom:16px}
+          .field input{font-size:18px;margin-left:12px}
+          .country{font-size:18px}
+          .method-row{margin-bottom:25px}
+          .method-row button{font-size:17px}
+          .submit{height:66px;border-radius:18px;font-size:22px}
+          .agreement{font-size:14px;margin-top:25px}
+          .bottom-actions{left:26px;right:26px;bottom:34px;gap:13px}
+          .social{width:76px;height:62px;border-radius:31px}
+          .recover{height:62px;padding:0 24px;font-size:17px}
+          .apple{font-size:29px}.more{font-size:25px}
+          .help{font-size:17px}
+          .back{width:42px;height:42px}
+          .register-link{right:26px;top:94px;font-size:14px}
+          .otp-row{grid-template-columns:1fr 112px;gap:8px}.otp-send{height:66px;border-radius:18px;font-size:14px}
+        }
+        @media(max-height:760px){.login-content{padding-top:24px}.login-title{margin-bottom:30px}.bottom-actions{bottom:20px}}
       `}</style>
-      <section className="auth-card-v2" aria-label="星流账号">
-        <div className="auth-brand-v2"><div className="auth-mark-v2"><Sparkles size={20}/></div><div><strong>星流</strong><span>发现值得被看见的瞬间</span></div></div>
-        <div className="auth-switch-v2"><button type="button" className={mode === "login" ? "active" : ""} onClick={() => switchMode("login")}>登录</button><button type="button" className={mode === "register" ? "active" : ""} onClick={() => switchMode("register")}>注册</button></div>
-        {mode === "login" && <div className="auth-method-v2"><button type="button" className={method === "password" ? "active" : ""} onClick={() => switchMethod("password")}><KeyRound size={13}/>密码登录</button><button type="button" className={method === "otp" ? "active" : ""} onClick={() => switchMethod("otp")}><Mail size={13}/>邮箱验证码</button></div>}
-        <div className="auth-title-v2"><h1>{mode === "login" ? (method === "otp" ? "验证码登录" : "欢迎回来") : "创建你的星流账号"}</h1><p>{mode === "login" ? "关注创作者、刷视频、聊天，全部同步" : "用邮箱创建一个真正属于你的账号"}</p></div>
-        <form onSubmit={handleSubmit}>
-          {mode === "register" && <div className="auth-field-v2"><label>昵称</label><input className="auth-input-v2" value={nickname} onChange={e => setNickname(e.target.value)} placeholder="例如：庆乐" maxLength={20} autoComplete="nickname" /></div>}
-          <div className="auth-field-v2"><label>邮箱</label><input className="auth-input-v2" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" autoCapitalize="none" /></div>
-          {method === "otp" && mode === "login" ? <div className="auth-field-v2"><label>验证码</label><div className="auth-code-row"><input className="auth-input-v2" inputMode="numeric" maxLength={6} value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, ""))} placeholder="6 位验证码" autoComplete="one-time-code" /><button type="button" disabled={loading || cooldown > 0} onClick={sendOtp}>{cooldown > 0 ? `${cooldown}s 后重发` : "发送验证码"}</button></div></div> : <><div className="auth-field-v2"><label>密码</label><div className="auth-password-v2"><input className="auth-input-v2" type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="至少 6 位" autoComplete={mode === "login" ? "current-password" : "new-password"} /><button className="auth-eye-v2" type="button" onClick={() => setShowPassword(v => !v)}>{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div></div>{mode === "register" && <div className="auth-field-v2"><label>确认密码</label><div className="auth-password-v2"><input className="auth-input-v2" type={showConfirm ? "text" : "password"} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="再次输入密码" autoComplete="new-password" /><button className="auth-eye-v2" type="button" onClick={() => setShowConfirm(v => !v)}>{showConfirm ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div></div>}</>}
-          {mode === "login" && method === "password" && <button type="button" className="auth-forgot-v2" onClick={() => router.push(`/auth/reset?returnTo=${encodeURIComponent(returnTo)}`)}>忘记密码？</button>}
-          {error && <div className="auth-message-v2 auth-error-v2" role="alert">{error}</div>}
-          {success && <div className="auth-message-v2 auth-success-v2" role="status"><CheckCircle2 size={14}/>{success}</div>}
-          <button className="auth-submit-v2" type="submit" disabled={loading}>{loading ? "处理中…" : <>{mode === "login" ? (method === "otp" ? "验证并登录" : "登录星流") : "创建账号"}<ArrowRight size={17}/></>}</button>
-        </form>
-        <div className="auth-trust-v2"><ShieldCheck size={13}/>账号数据由 Supabase 安全保存</div>
-        <p className="auth-tip-v2">登录即表示你同意星流的服务规则。我们不会公开你的邮箱地址。</p>
-      </section>
+
+      <div className="login-wrap">
+        <header className="login-top">
+          <button className="back" type="button" aria-label="返回" onClick={() => router.back()}><ArrowLeft size={34}/></button>
+          <button className="help" type="button"><HelpCircle size={18} style={{verticalAlign:"-3px",marginRight:5}}/>帮助</button>
+        </header>
+
+        <button className="register-link" type="button" onClick={() => switchMode(mode === "login" ? "register" : "login")}>
+          {mode === "login" ? "注册账号" : "返回登录"}
+        </button>
+
+        <section className="login-content">
+          <h1 className="login-title">{mode === "login" ? "手机号密码登录" : "创建星流账号"}</h1>
+
+          <div className="switcher">
+            <button className={method === "password" ? "on" : ""} type="button" onClick={() => switchMethod("password")}>密码登录</button>
+            <span style={{color:"#ddd"}}>·</span>
+            <button className={method === "otp" ? "on" : ""} type="button" onClick={() => switchMethod("otp")}>验证码登录</button>
+          </div>
+
+          {mode === "register" && <div className="field"><div className="field-icon"><KeyRound size={23}/></div><input value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="请输入昵称" maxLength={20} autoComplete="nickname"/></div>}
+
+          <div className="field">
+            <div className="country"><b>+86</b><span style={{fontSize:14}}>▼</span><span className="divider"/></div>
+            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="请输入邮箱" autoComplete="email" autoCapitalize="none"/>
+          </div>
+
+          {method === "otp" && mode === "login" ? (
+            <div className="otp-row">
+              <div className="field"><div className="field-icon"><Mail size={23}/></div><input inputMode="numeric" maxLength={6} value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,""))} placeholder="请输入验证码" autoComplete="one-time-code"/></div>
+              <button className="otp-send" type="button" disabled={loading||cooldown>0} onClick={sendOtp}>{cooldown>0?`${cooldown}s 后重发`:"获取验证码"}</button>
+            </div>
+          ) : (
+            <>
+              <div className="field">
+                <div className="field-icon"><LockKeyhole size={23}/></div>
+                <input type={showPassword?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder="请输入密码" autoComplete={mode === "login" ? "current-password" : "new-password"}/>
+                <button type="button" aria-label="显示密码" onClick={()=>setShowPassword(v=>!v)} style={{border:0,background:"transparent",color:"#8e9097",display:"grid",placeItems:"center",padding:6}}>{showPassword?<EyeOff size={22}/>:<Eye size={22}/>}</button>
+              </div>
+              {mode === "register" && <div className="field"><div className="field-icon"><LockKeyhole size={23}/></div><input type={showConfirm?"text":"password"} value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="请再次输入密码" autoComplete="new-password"/><button type="button" aria-label="显示确认密码" onClick={()=>setShowConfirm(v=>!v)} style={{border:0,background:"transparent",color:"#8e9097",display:"grid",placeItems:"center",padding:6}}>{showConfirm?<EyeOff size={22}/>:<Eye size={22}/>}</button></div>}
+            </>
+          )}
+
+          <div className="method-row">
+            <button type="button" onClick={()=>setMethod(method === "password" ? "otp" : "password")}><span className="arrow">⇄</span> {method === "password" ? "验证码登录" : "密码登录"}</button>
+          </div>
+
+          {error && <div className="message">{error}</div>}
+          {success && <div className="message success"><CheckCircle2 size={16}/>{success}</div>}
+
+          <button className="submit" type="button" disabled={loading} onClick={(e)=>handleSubmit(e as unknown as FormEvent<HTMLFormElement>)}>{loading ? "登录中…" : "登录"}</button>
+
+          <div className="agreement">
+            <label><input className="check" type="checkbox" defaultChecked={false}/><span>已阅读并同意</span></label>
+            <a href="/terms">用户协议</a><span>和</span><a href="/privacy">隐私政策</a>
+          </div>
+        </section>
+
+        <div className="bottom-actions">
+          <button className="social" type="button" aria-label="Apple 登录"><span className="apple">●</span></button>
+          <button className="social" type="button" aria-label="更多登录方式"><MoreHorizontal className="more" size={32}/></button>
+          <button className="recover" type="button" onClick={()=>router.push(`/auth/reset?returnTo=${encodeURIComponent(returnTo)}`)}>找回账号</button>
+        </div>
+      </div>
     </main>
   );
 }
