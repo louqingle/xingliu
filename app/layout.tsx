@@ -1,9 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import { X as LucideX } from "lucide-react";
 import "./globals.css";
 import "./feed-enhance.css";
 import "./profile/profile-enhance.css";
 import SplashScreen from "./splash-screen";
 import VideoFullscreen from "./video-fullscreen";
+
+globalThis.X = LucideX;
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://xingliu.vercel.app"),
