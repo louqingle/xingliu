@@ -1,5 +1,5 @@
-import StudioV5 from "./studio-v5";
+import StudioV4 from "./studio-v4";
 
 export default function UploadPage() {
-  return <StudioV5 />;
+  return <StudioV4 />;
 }
