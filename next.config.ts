@@ -4,7 +4,8 @@ const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  // Camera/microphone are required by the Studio page. Do not disable them here.
+  { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=()" },
   { key: "X-DNS-Prefetch-Control", value: "on" },
 ];
 
