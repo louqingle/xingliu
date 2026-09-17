@@ -7,14 +7,12 @@ export default function StudioV4Fixed() {
     <>
       <StudioV4 />
       <style jsx global>{`
-        /* V4 camera framing fix: show the full camera frame instead of an excessive crop. */
-        .stage video {
-          object-fit: contain !important;
-          background: #000 !important;
-        }
-        .stage {
-          background: #000 !important;
-        }
+        html,body{margin:0!important;padding:0!important;background:#000!important;overflow:hidden!important}
+        .studio{position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;min-height:100dvh!important;overflow:hidden!important}
+        .stage{position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;min-height:100dvh!important;overflow:hidden!important;background:#000!important}
+        .stage video{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;object-fit:cover!important;background:#000!important}
+        .top{padding-top:max(12px,env(safe-area-inset-top))!important}
+        .bottom{padding-bottom:max(28px,calc(28px + env(safe-area-inset-bottom)))!important}
       `}</style>
     </>
   );
