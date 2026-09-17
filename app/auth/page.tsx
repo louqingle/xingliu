@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { Apple, ArrowLeft, CheckCircle2, ChevronDown, Eye, EyeOff, HelpCircle, LockKeyhole, MoreHorizontal } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, CheckCircle2, Eye, EyeOff, HelpCircle, Mail, Phone } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
@@ -10,29 +10,31 @@ function safeReturnTo(value: string | null) {
   return value;
 }
 
-function friendlyError(message: string) {
-  if (/invalid login credentials/i.test(message)) return "手机号或密码不正确";
-  if (/phone.*not.*enabled|phone.*disabled|provider.*disabled/i.test(message)) return "手机号登录还没有在 Supabase Auth 中开启";
-  if (/sms.*provider|twilio|messagebird|vonage/i.test(message)) return "短信服务还没有配置，请先在 Supabase 配置短信服务商";
-  if (/user already registered/i.test(message)) return "这个手机号已经注册过了，请直接登录";
-  if (/password should be at least/i.test(message)) return "密码至少需要 6 位";
-  if (/rate limit|too many requests/i.test(message)) return "操作太频繁，请稍后再试";
-  if (/invalid.*phone|phone.*invalid/i.test(message)) return "请输入正确的手机号";
-  return message || "操作失败，请稍后再试";
-}
-
 function normalizePhone(raw: string) {
   const digits = raw.replace(/\D/g, "");
-  if (!digits) return "";
-  return `+86${digits}`;
+  return digits ? `+86${digits}` : "";
+}
+
+function friendlyError(message: string) {
+  if (/invalid login credentials/i.test(message)) return "账号或密码不正确";
+  if (/email.*not.*confirmed/i.test(message)) return "邮箱还没有完成验证，请先去邮箱确认";
+  if (/phone.*not.*enabled|phone.*disabled|provider.*disabled/i.test(message)) return "手机号登录还没有在 Supabase Auth 中开启";
+  if (/sms.*provider|twilio|messagebird|vonage/i.test(message)) return "短信服务还没有配置，请先在 Supabase 配置短信服务商";
+  if (/user already registered/i.test(message)) return "这个账号已经注册过了，请直接登录";
+  if (/password should be at least/i.test(message)) return "密码至少需要 6 位";
+  if (/rate limit|too many requests/i.test(message)) return "操作太频繁，请稍后再试";
+  if (/invalid.*email/i.test(message)) return "请输入正确的邮箱地址";
+  if (/invalid.*phone|phone.*invalid/i.test(message)) return "请输入正确的手机号";
+  return message || "操作失败，请稍后再试";
 }
 
 export default function AuthPage() {
   const router = useRouter();
   const [returnTo, setReturnTo] = useState("/");
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [method, setMethod] = useState<"password" | "otp">("password");
-  const [phone, setPhone] = useState("");
+  const [method, setMethod] = useState<"phone" | "email">("phone");
+  const [loginType, setLoginType] = useState<"password" | "otp">("password");
+  const [identifier, setIdentifier] = useState("");
   const [nickname, setNickname] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -54,9 +56,7 @@ export default function AuthPage() {
       if (alive && data.session) router.replace(next);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (alive && session && (event === "SIGNED_IN" || event === "PASSWORD_RECOVERY")) {
-        router.replace(safeReturnTo(new URLSearchParams(window.location.search).get("returnTo")));
-      }
+      if (alive && session && (event === "SIGNED_IN" || event === "PASSWORD_RECOVERY")) router.replace(next);
     });
     return () => { alive = false; listener.subscription.unsubscribe(); };
   }, [router]);
@@ -68,19 +68,23 @@ export default function AuthPage() {
   }, [cooldown]);
 
   function resetMessage() { setError(""); setSuccess(""); }
-  function switchMode(next: "login" | "register") {
-    setMode(next); setMethod("password"); resetMessage(); setPassword(""); setConfirmPassword(""); setOtp("");
+
+  function changeMethod(next: "phone" | "email") {
+    setMethod(next); setLoginType("password"); setIdentifier(""); setOtp(""); resetMessage();
   }
-  function switchMethod(next: "password" | "otp") { setMethod(next); resetMessage(); setOtp(""); }
+
+  function changeMode(next: "login" | "register") {
+    setMode(next); setLoginType("password"); setPassword(""); setConfirmPassword(""); setOtp(""); resetMessage();
+  }
 
   async function sendPhoneOtp() {
     if (!supabase || loading || cooldown > 0) return;
     resetMessage();
-    if (!/^1\d{10}$/.test(phone.trim())) { setError("请输入正确的 11 位手机号"); return; }
+    if (!/^1\d{10}$/.test(identifier.trim())) { setError("请输入正确的 11 位手机号"); return; }
     if (!agreed) { setError("请先阅读并同意用户协议和隐私政策"); return; }
     setLoading(true);
     try {
-      const { error: otpError } = await supabase.auth.signInWithOtp({ phone: normalizePhone(phone) });
+      const { error: otpError } = await supabase.auth.signInWithOtp({ phone: normalizePhone(identifier) });
       if (otpError) throw otpError;
       setCooldown(60);
       setSuccess("验证码已发送，请查收短信");
@@ -91,25 +95,28 @@ export default function AuthPage() {
   async function verifyPhoneOtp() {
     if (!supabase || loading) return;
     resetMessage();
-    if (!/^1\d{10}$/.test(phone.trim())) { setError("请输入正确的 11 位手机号"); return; }
+    if (!/^1\d{10}$/.test(identifier.trim())) { setError("请输入正确的 11 位手机号"); return; }
     if (!/^\d{6}$/.test(otp.trim())) { setError("请输入 6 位验证码"); return; }
     if (!agreed) { setError("请先阅读并同意用户协议和隐私政策"); return; }
     setLoading(true);
     try {
-      const { error: verifyError } = await supabase.auth.verifyOtp({ phone: normalizePhone(phone), token: otp.trim(), type: "sms" });
+      const { error: verifyError } = await supabase.auth.verifyOtp({ phone: normalizePhone(identifier), token: otp.trim(), type: "sms" });
       if (verifyError) throw verifyError;
       router.replace(returnTo);
     } catch (err) { setError(friendlyError(err instanceof Error ? err.message : "验证码错误")); }
     finally { setLoading(false); }
   }
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function handleSubmit() {
     if (loading) return;
-    if (method === "otp") { await verifyPhoneOtp(); return; }
     resetMessage();
     if (!supabase) { setError("登录服务未配置，请检查 Vercel 环境变量"); return; }
-    if (!/^1\d{10}$/.test(phone.trim())) { setError("请输入正确的 11 位手机号"); return; }
+    if (method === "phone" && loginType === "otp") { await verifyPhoneOtp(); return; }
+    if (method === "phone") {
+      if (!/^1\d{10}$/.test(identifier.trim())) { setError("请输入正确的 11 位手机号"); return; }
+    } else if (!/^\S+@\S+\.\S+$/.test(identifier.trim())) {
+      setError("请输入正确的邮箱地址"); return;
+    }
     if (password.length < 6) { setError("密码至少需要 6 位"); return; }
     if (!agreed) { setError("请先阅读并同意用户协议和隐私政策"); return; }
     if (mode === "register") {
@@ -119,12 +126,13 @@ export default function AuthPage() {
     }
     setLoading(true);
     try {
-      const fullPhone = normalizePhone(phone);
       if (mode === "register") {
         const cleanNickname = nickname.trim();
+        const credentials = method === "phone"
+          ? { phone: normalizePhone(identifier), password }
+          : { email: identifier.trim(), password };
         const { data, error: signUpError } = await supabase.auth.signUp({
-          phone: fullPhone,
-          password,
+          ...credentials,
           options: { data: { nickname: cleanNickname, display_name: cleanNickname } },
         });
         if (signUpError) throw signUpError;
@@ -134,10 +142,13 @@ export default function AuthPage() {
         }
         if (data.session) { router.replace(returnTo); return; }
         setMode("login"); setPassword(""); setConfirmPassword("");
-        setSuccess("账号创建成功。如果开启了短信验证，请先完成手机号验证");
+        setSuccess(method === "email" ? "注册成功，请去邮箱完成验证后再登录" : "注册成功，请直接登录");
         return;
       }
-      const { error: signInError } = await supabase.auth.signInWithPassword({ phone: fullPhone, password });
+
+      const { error: signInError } = method === "phone"
+        ? await supabase.auth.signInWithPassword({ phone: normalizePhone(identifier), password })
+        : await supabase.auth.signInWithPassword({ email: identifier.trim(), password });
       if (signInError) throw signInError;
       router.replace(returnTo);
     } catch (err) { setError(friendlyError(err instanceof Error ? err.message : "登录失败")); }
@@ -147,35 +158,35 @@ export default function AuthPage() {
   return (
     <main className="login-page">
       <style jsx global>{`
-        *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#171923;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif}button,input{font:inherit}button{cursor:pointer}.login-page{min-height:100dvh;background:#fff;overflow:auto}.login-wrap{width:min(100%,760px);min-height:100dvh;margin:0 auto;padding:0 52px;position:relative}.login-top{height:112px;display:flex;align-items:center;justify-content:space-between}.back{width:48px;height:48px;border:0;background:transparent;color:#20222b;display:grid;place-items:center;border-radius:50%}.help{border:0;background:transparent;color:#22242d;font-size:19px;font-weight:500;padding:10px 2px}.login-content{padding-top:55px}.login-title{font-size:40px;line-height:1.15;letter-spacing:-1.5px;font-weight:750;margin:0 0 44px;color:#171923}.switcher{display:flex;gap:14px;margin:0 0 24px}.switcher button{border:0;background:none;color:#a0a1a7;font-size:17px;padding:0}.switcher .on{color:#075da9;font-weight:700}.field{height:78px;background:#f7f7f8;border-radius:22px;display:flex;align-items:center;padding:0 30px;margin-bottom:18px;border:1px solid transparent}.field:focus-within{background:#f4f4f6;border-color:#e4e4e8}.country{display:flex;align-items:center;gap:7px;font-size:21px;white-space:nowrap}.divider{height:28px;width:1px;background:#c8c9ce;margin-left:8px}.field input{width:100%;border:0;outline:0;background:transparent;font-size:23px;color:#242631;margin-left:17px;min-width:0}.field input::placeholder{color:#b7b8be}.password{position:relative}.password input{padding-right:46px}.eye{position:absolute;right:8px;top:8px;width:48px;height:62px;border:0;background:transparent;color:#8f9097;display:grid;place-items:center}.method-row{height:78px;display:grid;grid-template-columns:1fr 150px;gap:12px;margin-bottom:16px}.method-row .field{margin:0}.otp-send{height:78px;border:1px solid #e1e1e5;background:#fff;border-radius:22px;color:#075da9;font-size:17px;font-weight:700}.otp-send:disabled{color:#aaa}.submit{height:78px;width:100%;border:0;border-radius:22px;background:#ffafbf;color:#fff;font-size:25px;font-weight:700;letter-spacing:.5px;margin-top:3px}.submit:disabled{opacity:.65}.agreement{display:flex;justify-content:center;align-items:center;gap:7px;margin-top:27px;color:#8f9097;font-size:17px;flex-wrap:wrap}.check{width:25px;height:25px;border:3px solid #b5b6bb;border-radius:50%;background:#fff;appearance:none;padding:0}.check:checked{border-color:#0a62aa;box-shadow:inset 0 0 0 5px #fff;background:#0a62aa}.agreement label{display:flex;align-items:center;gap:7px;cursor:pointer}.agreement a{color:#075da9;text-decoration:none}.message{border-radius:14px;padding:13px 15px;font-size:14px;line-height:1.5;margin:14px 0;color:#9b2631;background:#fff1f2;border:1px solid #ffd2d7}.success{color:#287346;background:#effaf2;border-color:#ccebd5;display:flex;gap:7px;align-items:center}.bottom-actions{position:absolute;left:52px;right:52px;bottom:54px;display:flex;justify-content:center;align-items:center;gap:28px}.social{width:96px;height:76px;border:1px solid #e3e3e7;border-radius:38px;background:#fff;display:grid;place-items:center;color:#050505}.more{font-size:31px;letter-spacing:3px;color:#777}.recover{height:76px;padding:0 34px;border:1px solid #e2e2e6;background:#fff;border-radius:38px;color:#7c7e86;font-size:22px}.register-link{position:absolute;right:52px;top:113px;border:0;background:none;color:#075da9;font-size:16px}.hint{color:#9b9ca3;text-align:center;font-size:13px;margin-top:12px}.hint b{color:#075da9}.@media(max-width:600px){.login-wrap{padding:0 26px}.login-top{height:92px}.login-content{padding-top:38px}.login-title{font-size:31px;margin-bottom:34px}.field{height:66px;border-radius:18px;padding:0 20px;margin-bottom:14px}.field input{font-size:18px;margin-left:12px}.country{font-size:18px}.method-row{height:66px;grid-template-columns:1fr 112px;gap:8px}.otp-send{height:66px;border-radius:18px;font-size:14px}.submit{height:66px;border-radius:18px;font-size:22px}.agreement{font-size:14px;margin-top:22px}.bottom-actions{left:26px;right:26px;bottom:34px;gap:13px}.social{width:76px;height:62px;border-radius:31px}.recover{height:62px;padding:0 24px;font-size:17px}.more{font-size:25px}.help{font-size:17px}.back{width:42px;height:42px}.register-link{right:26px;top:94px;font-size:14px}}@media(max-height:760px){.login-content{padding-top:18px}.login-title{margin-bottom:25px}.bottom-actions{bottom:18px}}
+        *{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#171923;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif}button,input{font:inherit}button{cursor:pointer}.login-page{min-height:100dvh;background:#fff}.login-wrap{width:min(100%,760px);min-height:100dvh;margin:0 auto;padding:0 52px;position:relative}.login-top{height:112px;display:flex;align-items:center;justify-content:space-between}.back,.help{border:0;background:transparent;color:#20222b}.back{width:48px;height:48px;display:grid;place-items:center;border-radius:50%}.help{font-size:18px;padding:10px}.login-content{padding-top:55px}.login-title{font-size:40px;line-height:1.15;letter-spacing:-1.5px;font-weight:750;margin:0 0 34px}.switcher{display:flex;gap:22px;margin-bottom:22px;border-bottom:1px solid #eee;padding-bottom:14px}.switcher button{border:0;background:none;color:#aaa;font-size:17px;padding:0 0 9px}.switcher .on{color:#075da9;font-weight:700;border-bottom:2px solid #075da9}.field{height:76px;background:#f7f7f8;border-radius:21px;display:flex;align-items:center;padding:0 25px;margin-bottom:15px;border:1px solid transparent}.field:focus-within{border-color:#e3e3e8;background:#f4f4f6}.field input{width:100%;border:0;outline:0;background:transparent;font-size:21px;color:#242631;margin-left:14px;min-width:0}.field input::placeholder{color:#b5b6bc}.method-row{display:grid;grid-template-columns:1fr 145px;gap:10px}.otp-send{height:76px;border:1px solid #e0e0e5;background:#fff;border-radius:21px;color:#075da9;font-weight:700}.otp-send:disabled{color:#aaa}.password{position:relative}.password input{padding-right:44px}.eye{position:absolute;right:7px;top:7px;width:50px;height:62px;border:0;background:none;color:#92939a;display:grid;place-items:center}.submit{height:76px;width:100%;border:0;border-radius:21px;background:#ffafbf;color:#fff;font-size:24px;font-weight:700;margin-top:3px}.submit:disabled{opacity:.65}.agreement{display:flex;justify-content:center;align-items:center;gap:7px;margin-top:24px;color:#909198;font-size:15px;flex-wrap:wrap}.check{width:23px;height:23px;appearance:none;border:2px solid #b5b6bb;border-radius:50%;padding:0;background:#fff}.check:checked{border-color:#075da9;box-shadow:inset 0 0 0 4px #fff;background:#075da9}.agreement a{color:#075da9;text-decoration:none}.message{border-radius:14px;padding:12px 14px;font-size:14px;line-height:1.5;margin:14px 0;color:#9b2631;background:#fff1f2;border:1px solid #ffd2d7}.success{color:#287346;background:#effaf2;border-color:#ccebd5;display:flex;gap:7px;align-items:center}.bottom-actions{position:absolute;left:52px;right:52px;bottom:46px;display:flex;justify-content:center;align-items:center;gap:14px}.social,.recover{height:64px;border:1px solid #e2e2e6;background:#fff;border-radius:32px;color:#555}.social{width:64px;display:grid;place-items:center}.recover{padding:0 24px;font-size:17px}.register-link{position:absolute;right:52px;top:112px;border:0;background:none;color:#075da9;font-size:16px}@media(max-width:600px){.login-wrap{padding:0 25px}.login-top{height:88px}.login-content{padding-top:32px}.login-title{font-size:31px;margin-bottom:29px}.field{height:65px;border-radius:18px;padding:0 19px}.field input{font-size:18px}.method-row{grid-template-columns:1fr 110px}.otp-send{height:65px;border-radius:18px;font-size:13px}.submit{height:65px;border-radius:18px;font-size:21px}.agreement{font-size:13px}.bottom-actions{left:25px;right:25px;bottom:25px}.recover{font-size:16px}.register-link{right:25px;top:90px;font-size:14px}}
       `}</style>
 
       <div className="login-wrap">
-        <header className="login-top"><button className="back" type="button" aria-label="返回" onClick={() => router.back()}><ArrowLeft size={34}/></button><button className="help" type="button"><HelpCircle size={18} style={{verticalAlign:"-3px",marginRight:5}}/>帮助</button></header>
-        <button className="register-link" type="button" onClick={() => switchMode(mode === "login" ? "register" : "login")}>{mode === "login" ? "注册账号" : "返回登录"}</button>
-
+        <header className="login-top"><button className="back" type="button" aria-label="返回" onClick={() => router.back()}><ArrowLeft size={31}/></button><button className="help" type="button"><HelpCircle size={18} style={{verticalAlign:"-3px",marginRight:5}}/>帮助</button></header>
+        <button className="register-link" type="button" onClick={() => changeMode(mode === "login" ? "register" : "login")}>{mode === "login" ? "注册账号" : "返回登录"}</button>
         <section className="login-content">
-          <h1 className="login-title">{mode === "login" ? "手机号密码登录" : "创建星流账号"}</h1>
-          <div className="switcher"><button className={method === "password" ? "on" : ""} type="button" onClick={() => switchMethod("password")}>密码登录</button><span style={{color:"#ddd"}}>·</span><button className={method === "otp" ? "on" : ""} type="button" onClick={() => switchMethod("otp")}>验证码登录</button></div>
+          <h1 className="login-title">{mode === "login" ? "登录星流" : "创建星流账号"}</h1>
+          <div className="switcher">
+            <button className={method === "phone" ? "on" : ""} type="button" onClick={() => changeMethod("phone")}><Phone size={16} style={{verticalAlign:"-3px",marginRight:5}}/>手机号</button>
+            <button className={method === "email" ? "on" : ""} type="button" onClick={() => changeMethod("email")}><Mail size={16} style={{verticalAlign:"-3px",marginRight:5}}/>邮箱</button>
+          </div>
 
-          {mode === "register" && <div className="field"><LockKeyhole size={22}/><input value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="请输入昵称" maxLength={20} autoComplete="nickname"/></div>}
+          {mode === "register" && <div className="field"><input value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="请输入昵称" maxLength={20} autoComplete="nickname"/></div>}
 
-          {method === "otp" ? <div className="method-row"><div className="field"><div className="country"><b>+86</b><ChevronDown size={16}/><span className="divider"/></div><input inputMode="numeric" maxLength={11} value={phone} onChange={e=>setPhone(e.target.value.replace(/\D/g,""))} placeholder="请输入手机号" autoComplete="tel"/></div><button className="otp-send" type="button" disabled={loading||cooldown>0} onClick={sendPhoneOtp}>{cooldown>0?`${cooldown}s 重发`:"获取验证码"}</button></div> : <>
-            <div className="field"><div className="country"><b>+86</b><ChevronDown size={16}/><span className="divider"/></div><input inputMode="numeric" maxLength={11} value={phone} onChange={e=>setPhone(e.target.value.replace(/\D/g,""))} placeholder="请输入手机号" autoComplete="tel"/></div>
-            <div className="field password"><LockKeyhole size={22}/><input type={showPassword?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder="请输入密码" autoComplete={mode==="login"?"current-password":"new-password"}/><button className="eye" type="button" onClick={()=>setShowPassword(v=>!v)}>{showPassword?<EyeOff size={20}/>:<Eye size={20}/>}</button></div>
-            {mode === "register" && <div className="field password"><LockKeyhole size={22}/><input type={showConfirm?"text":"password"} value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="请再次输入密码" autoComplete="new-password"/><button className="eye" type="button" onClick={()=>setShowConfirm(v=>!v)}>{showConfirm?<EyeOff size={20}/>:<Eye size={20}/>}</button></div>}
+          {method === "phone" && loginType === "otp" ? <div className="method-row"><div className="field"><input inputMode="numeric" maxLength={11} value={identifier} onChange={e=>setIdentifier(e.target.value.replace(/\D/g,""))} placeholder="请输入手机号" autoComplete="tel"/></div><button className="otp-send" type="button" disabled={loading||cooldown>0} onClick={sendPhoneOtp}>{cooldown>0?`${cooldown}s 重发`:"获取验证码"}</button></div> : <div className="field"><input value={identifier} onChange={e=>setIdentifier(e.target.value)} placeholder={method === "phone" ? "请输入手机号" : "请输入邮箱地址"} inputMode={method === "phone" ? "numeric" : "email"} autoComplete={method === "phone" ? "tel" : "email"}/></div>}
+
+          {method === "phone" && loginType === "otp" ? <div className="field"><input inputMode="numeric" maxLength={6} value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,""))} placeholder="请输入 6 位验证码" autoComplete="one-time-code"/></div> : <>
+            <div className="field password"><input type={showPassword ? "text" : "password"} value={password} onChange={e=>setPassword(e.target.value)} placeholder="请输入密码" autoComplete={mode === "register" ? "new-password" : "current-password"}/><button className="eye" type="button" aria-label="显示密码" onClick={()=>setShowPassword(v=>!v)}>{showPassword?<EyeOff size={22}/>:<Eye size={22}/>}</button></div>
+            {mode === "register" && <div className="field password"><input type={showConfirm ? "text" : "password"} value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="请再次输入密码" autoComplete="new-password"/><button className="eye" type="button" aria-label="显示确认密码" onClick={()=>setShowConfirm(v=>!v)}>{showConfirm?<EyeOff size={22}/>:<Eye size={22}/>}</button></div>}
           </>}
 
-          {method === "otp" && <div className="field"><LockKeyhole size={22}/><input inputMode="numeric" maxLength={6} value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,""))} placeholder="请输入 6 位验证码" autoComplete="one-time-code"/></div>}
+          {method === "phone" && mode === "login" && <button type="button" className="switch-otp" onClick={()=>{setLoginType(loginType === "password" ? "otp" : "password");resetMessage()}}>{loginType === "password" ? "验证码登录" : "密码登录"}</button>}
           {error && <div className="message">{error}</div>}
-          {success && <div className="message success"><CheckCircle2 size={15}/>{success}</div>}
-          <button className="submit" type="button" disabled={loading||!agreed} onClick={(e)=>{void handleSubmit(e as unknown as FormEvent<HTMLFormElement>)}}>{loading?"处理中…":method==="otp"?"验证并登录":mode==="login"?"登录":"注册并登录"}</button>
-
-          <div className="agreement"><label><input className="check" type="checkbox" checked={agreed} onChange={e=>setAgreed(e.target.checked)}/>已阅读并同意</label><a href="#">用户协议</a><span>和</span><a href="#">隐私政策</a></div>
-          <div className="hint">手机号仅用于账号登录与安全验证 · <b>+86 中国大陆</b></div>
+          {success && <div className="message success"><CheckCircle2 size={17}/>{success}</div>}
+          <button className="submit" type="button" disabled={loading} onClick={()=>void handleSubmit()}>{loading ? "处理中…" : mode === "register" ? "注册" : loginType === "otp" ? "登录" : "登录"}</button>
+          <div className="agreement"><label><input className="check" type="checkbox" checked={agreed} onChange={e=>setAgreed(e.target.checked)}/>我已阅读并同意</label><a href="#">用户协议</a><span>和</span><a href="#">隐私政策</a></div>
         </section>
-
-        <div className="bottom-actions"><button className="social" type="button" aria-label="Apple 登录"><Apple size={34} fill="currentColor"/></button><button className="social" type="button" aria-label="更多登录方式"><MoreHorizontal size={34}/></button><button className="recover" type="button" onClick={()=>setSuccess("手机号密码找回功能下一步接入")}>找回账号</button></div>
+        <div className="bottom-actions"><button className="social" type="button" aria-label="Apple"></button><button className="social" type="button" aria-label="更多">•••</button><button className="recover" type="button" onClick={()=>setSuccess(method === "email" ? "邮箱账号找回功能可以下一步接入" : "手机号找回功能可以下一步接入")}>找回账号</button></div>
       </div>
     </main>
   );
