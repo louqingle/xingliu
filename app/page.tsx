@@ -17,7 +17,7 @@ const HOME_READY_EVENT="xingliu-home-ready";
 
 export default function Home(){
  const router=useRouter();
- const feed=useRef<HTMLDivElement>(null);const players=useRef<Record<string,HTMLVideoElement|null>>({});const watchVideo=useRef<string|null>(null);const watchStarted=useRef(Date.now());
+ const feed=useRef<HTMLDivElement>(null);const players=useRef<Record<string,HTMLVideoElement|null>>({});const watchVideo=useRef<string|null>(null);const watchStarted=useRef(Date.now());const skipFirstTabReload=useRef(true);
  const [videos,setVideos]=useState<Video[]>([]),[index,setIndex]=useState(0),[muted,setMuted]=useState(true),[liked,setLiked]=useState<string[]>([]),[saved,setSaved]=useState<string[]>([]),[following,setFollowing]=useState<string[]>([]),[uid,setUid]=useState<string|null>(null),[tab,setTab]=useState<"推荐"|"关注">("推荐"),[search,setSearch]=useState(false),[q,setQ]=useState(""),[toast,setToast]=useState(""),[loading,setLoading]=useState(true),[loadingMore,setLoadingMore]=useState(false),[hasMore,setHasMore]=useState(true),[cursor,setCursor]=useState<Cursor>(null),[feedError,setFeedError]=useState(""),[commentVideo,setCommentVideo]=useState<Video|null>(null),[comments,setComments]=useState<Comment[]>([]),[commentText,setCommentText]=useState(""),[commentLoading,setCommentLoading]=useState(false),[commentSending,setCommentSending]=useState(false);
 
  const mapRows=useCallback((rows:any[],profiles:any[])=>rows.map((v:any)=>{const p=profiles.find(x=>x.id===v.user_id);const name=p?.username||p?.nickname||"星流用户";return{id:v.id,src:v.url,title:v.title||"分享一个瞬间",music:v.music||"原创音乐 · 星流",username:name,likes:v.like_count||0,comments:v.comment_count||0,avatar:(name||"星").slice(0,1),avatarUrl:p?.avatar_url||null,userId:v.user_id,createdAt:v.created_at,coverUrl:v.cover_url||null};}),[]);
@@ -31,16 +31,14 @@ export default function Home(){
    if(r.error)return {items:[],next:null,more:false,error:r.error.message};
    rows=r.data||[];
   }else{
-   let query=supabase.from("videos").select("id,url,title,music,like_count,comment_count,user_id,created_at,cover_url").eq("status","published").order("created_at",{ascending:false}).order("id",{ascending:false}).limit(PAGE_SIZE);
-   if(before?.createdAt)query=query.lt("created_at",before.createdAt);
-   const r=await query;
+   const r=await supabase.rpc("get_recommended_video_feed",{p_limit:PAGE_SIZE,p_before:before?.createdAt||null});
    if(r.error)return {items:[],next:null,more:false,error:r.error.message};
    rows=r.data||[];
   }
   const ids=[...new Set(rows.map((v:any)=>v.user_id))];
   let profiles:any[]=[];
   if(ids.length){const p=await supabase.from("profiles").select("id,username,nickname,avatar_url").in("id",ids);if(p.error)return {items:[],next:null,more:false,error:p.error.message};profiles=p.data||[];}
-  const items=mode==="关注"?rows.map((v:any)=>{const p=profiles.find(x=>x.id===v.user_id);const name=p?.username||p?.nickname||"星流用户";return{id:v.id,src:v.url,title:v.title||"分享一个瞬间",music:v.music||"原创音乐 · 星流",username:name,likes:v.like_count||0,comments:v.comment_count||0,avatar:(name||"星").slice(0,1),avatarUrl:p?.avatar_url||null,userId:v.user_id,createdAt:v.created_at,coverUrl:v.cover_url||null};}):mapRows(rows,profiles);
+  const items=mapRows(rows,profiles);
   const next=items.length?{createdAt:items[items.length-1].createdAt}:null;
   return {items,next,more:items.length===PAGE_SIZE,error:null};
  },[mapRows]);
@@ -73,9 +71,9 @@ export default function Home(){
  useEffect(()=>{let alive=true;(async()=>{if(!supabase)return;const {data:{session}}=await supabase.auth.getSession();if(!alive)return;const id=session?.user.id||null;setUid(id);await loadFeed(id);})();return()=>{alive=false}},[loadFeed]);
  useEffect(()=>{if(!supabase)return;const {data:sub}=supabase.auth.onAuthStateChange((_e,s)=>{const id=s?.user.id||null;setUid(id);void loadFeed(id)});return()=>sub.subscription.unsubscribe()},[loadFeed]);
  useEffect(()=>{if(!loading&&tab==="关注"&&!uid)setHasMore(false)},[loading,tab,uid]);
- const list=useMemo(()=>{const base=tab==="关注"?videos:videos;const hours=(date:string)=>Math.max(0,(Date.now()-new Date(date).getTime())/3600000);const score=(v:Video)=>v.likes*2.2+v.comments*3.5+Math.max(0,72-hours(v.createdAt))*1.2+(following.includes(v.userId)?10:0);return tab==="关注"?base:[...base].sort((a,b)=>score(b)-score(a));},[tab,videos,following]);
+ const list=useMemo(()=>videos,[videos]);
  const active=list[index]||list[0];
- useEffect(()=>{setIndex(0);feed.current?.scrollTo({top:0,behavior:"auto"});if(uid!==undefined)void loadFeed(uid)},[tab]);
+ useEffect(()=>{if(skipFirstTabReload.current){skipFirstTabReload.current=false;return;}setIndex(0);feed.current?.scrollTo({top:0,behavior:"auto"});void loadFeed(uid)},[tab]);
  useEffect(()=>{const el=feed.current;if(!el)return;let raf=0;const onScroll=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;const h=el.clientHeight||innerHeight;const i=Math.max(0,Math.min(Math.max(list.length-1,0),Math.round(el.scrollTop/h)));setIndex(x=>x===i?x:i);if(i>=list.length-2&&hasMore&&!loadingMore)void loadMore();})};el.addEventListener("scroll",onScroll,{passive:true});return()=>{el.removeEventListener("scroll",onScroll);if(raf)cancelAnimationFrame(raf)}},[list.length,hasMore,loadingMore,loadMore]);
  useEffect(()=>{Object.entries(players.current).forEach(([id,v])=>{if(!v)return;v.muted=muted;if(id===active?.id){v.play().catch(()=>{});}else v.pause()})},[active?.id,muted]);
  useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(""),1800);return()=>clearTimeout(t)},[toast]);
@@ -96,7 +94,7 @@ export default function Home(){
     {near?<video ref={el=>{players.current[v.id]=el}} className="video" src={v.src} poster={v.coverUrl||undefined} playsInline muted={muted} autoPlay={i===index} preload={i===index?"auto":"metadata"} onLoadedData={e=>{if(i===index){e.currentTarget.muted=muted;e.currentTarget.play().catch(()=>{})}}} onClick={()=>{const el=players.current[v.id];if(!el)return;if(el.paused)el.play().catch(()=>{});else el.pause()}} onDoubleClick={()=>like(v)} onEnded={()=>{if(i<list.length-1)jump(i+1)}}/>:<div className="video" style={{background:"#111"}}/>}
     <div className="shade top"/><div className="shade bottom"/><button className="sound" onClick={()=>setMuted(x=>!x)}>{muted?<VolumeX size={20}/>:<Volume2 size={20}/>}</button>
     <div className="actions"><Link href={`/user?username=${encodeURIComponent(v.username)}`} className={styles.actionAvatar} aria-label={`查看 @${v.username}`}><span className={styles.avatar}>{v.avatarUrl?<img src={v.avatarUrl} alt=""/>:v.avatar}</span>{v.userId!==uid&&!isFollow&&<span className={styles.plus}>+</span>}</Link><button className="action" onClick={()=>like(v)}><span className={`circle ${isLike?"like on":""}`}><Heart size={27} fill={isLike?"currentColor":"none"}/></span><b>{fmt(v.likes)}</b></button><button className="action" onClick={()=>openComments(v)}><span className="circle"><MessageCircle size={27}/></span><b>{fmt(v.comments)}</b></button><button className="action" onClick={()=>save(v)}><span className={`circle ${isSave?"saved":""}`}><Bookmark size={25} fill={isSave?"currentColor":"none"}/></span><b>{isSave?"已收藏":"收藏"}</b></button><button className="action" onClick={async()=>{void event("share",v.id);const url=`${location.origin}/video/${v.id}`;if(navigator.share)await navigator.share({title:v.title,url}).catch(()=>{});else{await navigator.clipboard?.writeText(url);setToast("链接已复制")}}}><span className="circle"><Share2 size={25}/></span><b>分享</b></button><span className="disc"><Play size={18}/></span></div>
-    <div className="info"><div className="author"><b className="authorName">@{v.username}</b>{v.userId!==uid&&<button className={`follow ${isFollow?"followed":""}`} onClick={()=>follow(v)}>{isFollow?"已关注":"关注"}</button>}</div><div className="title">{v.title}</div><div className="music">♫ {v.music}</div></div>
+    <div className="info"><div className="author"><b className="authorName">@{v.username}</b>{v.userId!==uid&&<button className={`follow ${isFollow?"followed":""}`} onClick={()=>follow(v)}>{isFollow?"已关注":"关注"}</button>}</div><div className="title">{v.title}</div><div className="music">♫ {v.music}</div>
    </section>})}
    {!loading&&!feedError&&loadingMore&&<div style={{position:"absolute",left:0,right:0,bottom:82,zIndex:60,textAlign:"center",fontSize:12,color:"rgba(255,255,255,.72)",pointerEvents:"none"}}>正在加载更多…</div>}
    {!loading&&!feedError&&!loadingMore&&!hasMore&&list.length>0&&<div style={{position:"absolute",left:0,right:0,bottom:82,zIndex:60,textAlign:"center",fontSize:11,color:"rgba(255,255,255,.5)",pointerEvents:"none"}}>已经到底了</div>}
