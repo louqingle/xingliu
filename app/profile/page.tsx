@@ -56,7 +56,7 @@ export default function ProfilePage(){
       html,body{margin:0;padding:0;background:#f6f7f8;color:#16171d;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif}
       button{font:inherit;cursor:pointer}a{text-decoration:none;color:inherit}
       .page{min-height:100dvh;background:#f6f7f8;padding-bottom:74px}
-      .hero{height:235px;position:relative;overflow:hidden;color:#fff;background:linear-gradient(180deg,#8bb7d0 0%,#527c95 38%,#34474d 73%,#252a2d 100%)}
+      .hero{height:235px;position:relative;overflow:hidden;color:#fff;background:linear-gradient(180deg,#8bb7d0 0%,#527c95 38%,#34474d 73%,#252a2d 100%);background-image:linear-gradient(180deg,#0000 0%,#0002 42%,#000b 100%),url("${profile?.background_url||""}");background-size:cover;background-position:center}
       .hero:before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 15% 28%,#ffffff22 0 10%,transparent 34%),linear-gradient(170deg,transparent 44%,#0008 100%)}
       .hero:after{content:"";position:absolute;left:-10%;right:-10%;bottom:18px;height:130px;background:radial-gradient(ellipse at 70% 60%,#10171988,transparent 58%),linear-gradient(180deg,transparent,#151a1c99);opacity:.9}
       .top{position:absolute;z-index:4;top:7px;left:0;right:0;padding:0 10px;display:flex;align-items:center;justify-content:space-between}
