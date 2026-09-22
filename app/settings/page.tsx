@@ -10,6 +10,7 @@ const TAG_OPTIONS = ["音乐","旅行","美食","摄影","运动","游戏","科�
 export default function SettingsPage() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
+  const bgFileRef = useRef<HTMLInputElement>(null);
   const [session,setSession]=useState<any>(null);
   const [profile,setProfile]=useState<any>(null);
   const [nickname,setNickname]=useState("");
@@ -19,6 +20,7 @@ export default function SettingsPage() {
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
   const [uploading,setUploading]=useState(false);
+  const [bgUploading,setBgUploading]=useState(false);
   const [msg,setMsg]=useState("");
   const [showGender,setShowGender]=useState(false);
 
@@ -46,6 +48,21 @@ export default function SettingsPage() {
     const {error:updateError}=await supabase.from("profiles").update({avatar_url:data.publicUrl}).eq("id",session.user.id);
     if(updateError){setMsg("头像已上传，但资料保存失败："+updateError.message);setUploading(false);return}
     setProfile((p:any)=>({...p,avatar_url:data.publicUrl}));setMsg("头像已更新");setUploading(false);
+  }
+
+  async function uploadBackground(e:ChangeEvent<HTMLInputElement>){
+    const file=e.target.files?.[0]; if(!file||!session||!supabase)return;
+    if(!file.type.startsWith("image/")){setMsg("请选择图片文件");return}
+    if(file.size>10*1024*1024){setMsg("背景图不能超过 10MB");return}
+    setBgUploading(true);setMsg("");
+    const ext=(file.name.split(".").pop()||"jpg").toLowerCase().replace(/[^a-z0-9]/g,"")||"jpg";
+    const path=`${session.user.id}/background-${Date.now()}.${ext}`;
+    const {error}=await supabase.storage.from("profile-backgrounds").upload(path,file,{upsert:false,contentType:file.type});
+    if(error){setMsg("背景图上传失败："+error.message);setBgUploading(false);return}
+    const {data}=supabase.storage.from("profile-backgrounds").getPublicUrl(path);
+    const {error:updateError}=await supabase.from("profiles").update({background_url:data.publicUrl}).eq("id",session.user.id);
+    if(updateError){setMsg("背景图已上传，但资料保存失败："+updateError.message);setBgUploading(false);return}
+    setProfile((p:any)=>({...p,background_url:data.publicUrl}));setMsg("主页背景已更新");setBgUploading(false);
   }
 
   async function save(){
