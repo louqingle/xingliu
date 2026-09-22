@@ -127,12 +127,12 @@ export default function ProfilePage(){
 
       {content.length>0?<div className="grid">{content.map(v=><Link href={`/video/${v.id}`} className="tile" key={v.id}>{v.cover_url?<img src={v.cover_url} alt=""/>:<video src={v.video_url} muted playsInline preload="metadata"/>}<span className="tileShade"/><span className="tileMeta">♥ {v.like_count||0}</span></Link>)}</div>:<div className="empty"><Grid2X2 size={36}/><div>{tab==="作品"?"还没有公开作品":tab+"内容暂时为空"}</div><Link href="/upload">发布作品</Link></div>}
 
-      </div>
-
-      <nav className="bottom">
-        <Link className="nav" href="/">首页</Link><Link className="nav" href="/discover">朋友</Link><Link className="nav" href="/upload"><span className="publish"><Plus size={28}/></span></Link><Link className="nav" href="/messages"><MessageCircle/><span>消息</span></Link><Link className="nav active" href="/profile"><span style={{fontSize:24,fontWeight:900}}>我</span><span>我</span></Link>
-      </nav>
     </section>
+    </div>
+
+    <nav className="bottom">
+        <Link className="nav" href="/">首页</Link><Link className="nav" href="/discover">朋友</Link><Link className="nav" href="/upload"><span className="publish"><Plus size={28}/></span></Link><Link className="nav" href="/messages"><MessageCircle/><span>消息</span></Link><Link className="nav active" href="/profile"><span style={{fontSize:24,fontWeight:900}}>我</span><span>我</span></Link>
+    </nav>
 
     {panel&&<div className="mask" onClick={()=>setPanel(false)}><section className="panel" onClick={e=>e.stopPropagation()}>
       <header className="panelHead"><b>全部功能</b><button className="close" onClick={()=>setPanel(false)}><X size={19}/></button></header>
