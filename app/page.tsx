@@ -36,7 +36,19 @@ export default function Home(){
   setLoading(false);
  },[tab]);
 
- const loadMore=useCallback(async()=>{\n  if(!supabase||loading||loadingMore||!hasMore||!cursor||(tab==="关注"&&!uid))return;\n  setLoadingMore(true);\n  const r=tab==="关注"?await supabase.rpc("get_following_video_feed",{p_limit:PAGE_SIZE,p_before:cursor}):await supabase.rpc("get_recommended_video_feed",{p_limit:PAGE_SIZE,p_before:cursor});\n  if(r.error){setToast("加载更多失败："+r.error.message);setLoadingMore(false);return;}\n  const rows=r.data||[];\n  const ids=[...new Set(rows.map((v:any)=>v.user_id))];let profiles:any[]=[];\n  if(ids.length){const p=await supabase.from("profiles").select("id,username,nickname,avatar_url").in("id",ids);profiles=p.data||[];}\n  const items=rows.map((v:any)=>{const p=profiles.find(x=>x.id===v.user_id);const name=p?.username||p?.nickname||"星流用户";return{id:v.id,src:v.url,title:v.title||"分享一个瞬间",music:v.music||"原创音乐 · 星流",username:name,likes:v.like_count||0,comments:v.comment_count||0,avatar:name.slice(0,1),avatarUrl:p?.avatar_url||null,userId:v.user_id,createdAt:v.created_at,coverUrl:v.cover_url||null};});\n  if(items.length){setVideos(x=>{const known=new Set(x.map(v=>v.id));return [...x,...items.filter(v=>!known.has(v.id))]});setCursor(items[items.length-1].createdAt);}\n  setHasMore(items.length===PAGE_SIZE);setLoadingMore(false);\n },[cursor,hasMore,loading,loadingMore,tab,uid]);\n useEffect(()=>{let alive=true;(async()=>{if(!supabase)return;const {data:{session}}=await supabase.auth.getSession();if(!alive)return;const id=session?.user.id||null;setUid(id);await loadFeed(id);})();return()=>{alive=false};},[loadFeed]);
+ const loadMore=useCallback(async()=>{
+  if(!supabase||loading||loadingMore||!hasMore||!cursor||(tab==="关注"&&!uid))return;
+  setLoadingMore(true);
+  const r=tab==="关注"?await supabase.rpc("get_following_video_feed",{p_limit:PAGE_SIZE,p_before:cursor}):await supabase.rpc("get_recommended_video_feed",{p_limit:PAGE_SIZE,p_before:cursor});
+  if(r.error){setToast("加载更多失败："+r.error.message);setLoadingMore(false);return;}
+  const rows=r.data||[];
+  const ids=[...new Set(rows.map((v:any)=>v.user_id))];let profiles:any[]=[];
+  if(ids.length){const p=await supabase.from("profiles").select("id,username,nickname,avatar_url").in("id",ids);profiles=p.data||[];}
+  const items=rows.map((v:any)=>{const p=profiles.find(x=>x.id===v.user_id);const name=p?.username||p?.nickname||"星流用户";return{id:v.id,src:v.url,title:v.title||"分享一个瞬间",music:v.music||"原创音乐 · 星流",username:name,likes:v.like_count||0,comments:v.comment_count||0,avatar:name.slice(0,1),avatarUrl:p?.avatar_url||null,userId:v.user_id,createdAt:v.created_at,coverUrl:v.cover_url||null};});
+  if(items.length){setVideos(x=>{const known=new Set(x.map(v=>v.id));return [...x,...items.filter(v=>!known.has(v.id))]});setCursor(items[items.length-1].createdAt);}
+  setHasMore(items.length===PAGE_SIZE);setLoadingMore(false);
+ },[cursor,hasMore,loading,loadingMore,tab,uid]);
+ useEffect(()=>{let alive=true;(async()=>{if(!supabase)return;const {data:{session}}=await supabase.auth.getSession();if(!alive)return;const id=session?.user.id||null;setUid(id);await loadFeed(id);})();return()=>{alive=false};},[loadFeed]);
  useEffect(()=>{if(!supabase)return;const {data:sub}=supabase.auth.onAuthStateChange((_e,s)=>{const id=s?.user.id||null;setUid(id)});return()=>sub.subscription.unsubscribe()},[]);
  useEffect(()=>{Object.entries(players.current).forEach(([id,v])=>{if(!v)return;v.muted=muted;if(id===videos[index]?.id)v.play().catch(()=>{});else v.pause()})},[index,muted,videos]);
  useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(""),1800);return()=>clearTimeout(t)},[toast]);
